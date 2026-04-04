@@ -1935,7 +1935,22 @@
 			}
 			
 			panel.classList.remove('hidden');
-			textSpan.innerHTML = text; // Allow bold tags etc.
+			textSpan.textContent = ''; // Clear existing
+
+			if (typeof text === 'string') {
+				textSpan.textContent = text;
+			} else if (Array.isArray(text)) {
+				text.forEach(part => {
+					if (part.color) {
+						const span = document.createElement('span');
+						span.textContent = part.text;
+						span.style.color = part.color;
+						textSpan.appendChild(span);
+					} else {
+						textSpan.appendChild(document.createTextNode(part.text));
+					}
+				});
+			}
 			
 			// Recalculate layout since the banner adds height
 			requestAnimationFrame(handleResize);
@@ -2631,73 +2646,107 @@
 		switch (t.step) {
 			case 0:
 				message = "Good day, chief. The sea is restless today, yes, but there is much work to be done. First, find us some Wood [E].We need 5 bundles.";
-				objective = "Gather 5 Wood <span style='color:#00ffff'>[E]</span>";
+				objective = [
+					{ text: "Gather 5 Wood " },
+					{ text: "[E]", color: "#00ffff" }
+				];
 				duration = 6000;
 				break;
 				
 			case 1:
 				message = "Good. Now, stand near that idle villager and order them to follow [F].";
-				objective = "Order Villager to Follow <span style='color:#00ffff'>[F]</span>";
+				objective = [
+					{ text: "Order Villager to Follow " },
+					{ text: "[F]", color: "#00ffff" }
+				];
 				duration = 6000;
 				break;
 				
 			case 2:
 				message = "They are listening. Now, assign them to gather Stone [G] on the Rubble.";
-				objective = "Assign Villager to Rubble <span style='color:#00ffff'>[G]</span>";
+				objective = [
+					{ text: "Assign Villager to Rubble " },
+					{ text: "[G]", color: "#00ffff" }
+				];
 				duration = 6000;
 				break;
 				
 			case 3:
 				message = "Excellent. Now, we must finish the Watchtower we were discussing. Watching for storms and ships on the horizon is essential for the village. Press [B] to enter build mode.";
-				objective = "Open Build Menu <span style='color:#00ffff'>[B]</span>";
+				objective = [
+					{ text: "Open Build Menu " },
+					{ text: "[B]", color: "#00ffff" }
+				];
 				duration = 7000;
 				break;
 				
 			case 4:
 				 message = "Select the tower [5], and place it [E] inside the empty enclosure. Don't block the door, now!";
-				 objective = "Place Watchtower inside the empty enclosure without blocking the door <span style='color:#00ffff'>[5] -> [E]</span>";
+				 objective = [
+					{ text: "Place Watchtower inside the empty enclosure without blocking the door " },
+					{ text: "[5] -> [E]", color: "#00ffff" }
+				 ];
 				 duration = 8000;
 				 break;
 
 			case 5:
 				message = "Now that the site is placed, assign the nearest villager to build it [G]! If the lazy bastards start idling before it's done, order them again!";
-				objective = "Assign Villager to Build Site <span style='color:#00ffff'>[G]</span>";
+				objective = [
+					{ text: "Assign Villager to Build Site " },
+					{ text: "[G]", color: "#00ffff" }
+				];
 				duration = 7000;
 				break;
 				
 			case 6:
 				message = "The Watchtower is complete. Now, assign a villager to man the tower [G].";
-				objective = "Assign Villager to Man Tower <span style='color:#00ffff'>[G]</span>";
+				objective = [
+					{ text: "Assign Villager to Man Tower " },
+					{ text: "[G]", color: "#00ffff" }
+				];
 				duration = 8000;
 				break;
 				
 			case 7:
 				message = "Splendid, now that... Wait... What's that in the water? By the gods! Ring the Warning Bell [b] now!";
-				objective = "RING THE BELL <span style='color:#00ffff'>[Interact with 'b']</span>";
+				objective = [
+					{ text: "RING THE BELL " },
+					{ text: "[Interact with 'b']", color: "#00ffff" }
+				];
 				duration = 6000;
 				break;
 				
 			case 8:
 				message = "The alarm forces general workers to shelter. Stand back! You, up there, in the tower! Kill it!";
-				objective = "Defeat the Enemy";
+				objective = [
+					{ text: "Defeat the Enemy" }
+				];
 				duration = 5000;
 				break;
 				
 			case 9:
 				message = "It is gone. For now. Ring the Warning Bell [b] again to sound the all-clear!";
-				objective = "Sound All-Clear <span style='color:#00ffff'>[Interact with 'b']</span>";
+				objective = [
+					{ text: "Sound All-Clear " },
+					{ text: "[Interact with 'b']", color: "#00ffff" }
+				];
 				duration = 8000;
 				break;
 				
 			case 10:
 				message = "The poor sod in the tower is terrified! Use the Rally call [R] near the tower to bring him down!";
-				objective = "Rally the Guard <span style='color:#00ffff'>[R]</span>";
+				objective = [
+					{ text: "Rally the Guard " },
+					{ text: "[R]", color: "#00ffff" }
+				];
 				duration = 8000;
 				break;
 
 			case 11:
 				message = "I have shown you all I can. This is madness. We must survive this madness... Wait. Look out!";
-				objective = "SURVIVE";
+				objective = [
+					{ text: "SURVIVE" }
+				];
 				duration = 10000;
 				break;
 
