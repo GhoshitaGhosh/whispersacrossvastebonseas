@@ -1851,6 +1851,7 @@
             needsRender: true,
             isGameOver: false,
             nextVillagerId: 1, // NEW: To uniquely identify villagers
+            tileElements: [], // Cache for DOM element references
 			dread: 0,
 			isAlarmActive: false,
 			isWellFed: false,
@@ -2058,7 +2059,10 @@
         function initGameScreen() {
             gameScreen.innerHTML = ''; // Clear old screen
             let html = '';
+            GAME_STATE.tileElements = []; // Clear/initialize cache
+
             for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
+                GAME_STATE.tileElements[y] = [];
                 for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
                     // Give each span a unique ID for direct manipulation
                     html += `<span id="tile-${y}-${x}"></span>`;
@@ -2066,6 +2070,13 @@
                 html += '\n'; // Add newline for <pre> formatting
             }
             gameScreen.innerHTML = html;
+
+            // Populate the cache after setting innerHTML
+            for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
+                for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
+                    GAME_STATE.tileElements[y][x] = document.getElementById(`tile-${y}-${x}`);
+                }
+            }
         }
 		
 		/**
@@ -3097,7 +3108,7 @@
 					
 					// Now, compare the new key against the buffer
 					if (bufferKey !== GAME_STATE.renderBuffer[y][x]) {
-						const span = document.getElementById(`tile-${y}-${x}`);
+						const span = GAME_STATE.tileElements[y][x];
 						if (span) {
 							span.innerHTML = getTileDisplayChar(newChar);
 							
@@ -3787,7 +3798,7 @@
                 
                 const tile = getTileAt(x, y);
                 if (tile === CONFIG.TILES.EMPTY || tile === CONFIG.TILES.BEACH) {
-                    const tileSpan = document.getElementById(`tile-${y}-${x}`);
+                    const tileSpan = GAME_STATE.tileElements[y][x];
                     if (tileSpan) {
                         validSpot = {
                             x: x,
@@ -3872,7 +3883,7 @@
             for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
                 const artRow = HORROR_FLASH_ART[y];
                 for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
-                    const span = document.getElementById(`tile-${y}-${x}`);
+                    const span = GAME_STATE.tileElements[y][x];
                     if (span) {
                         // Save the original state
                         originalTiles.push({
