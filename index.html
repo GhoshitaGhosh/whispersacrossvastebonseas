@@ -2057,15 +2057,17 @@
          */
         function initGameScreen() {
             gameScreen.innerHTML = ''; // Clear old screen
-            let html = '';
+            const fragment = document.createDocumentFragment();
             for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
                 for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
                     // Give each span a unique ID for direct manipulation
-                    html += `<span id="tile-${y}-${x}"></span>`;
+                    const span = document.createElement('span');
+                    span.id = `tile-${y}-${x}`;
+                    fragment.appendChild(span);
                 }
-                html += '\n'; // Add newline for <pre> formatting
+                fragment.appendChild(document.createTextNode('\n')); // Add newline for <pre> formatting
             }
-            gameScreen.innerHTML = html;
+            gameScreen.appendChild(fragment);
         }
 		
 		/**
