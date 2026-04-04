@@ -8444,17 +8444,28 @@
 		 * REVISED SCALING LOGIC
 		 * Fixes the "tiny map" issue by ensuring the wrapper fills the available space.
 		 */
+		let RESIZE_DOM_CACHE = null;
 		function handleResize() {
-			const wrapper = document.getElementById('screen-wrapper');
-			const scaler = document.getElementById('map-scaler');
-			const gameScreen = document.getElementById('game-screen');
-			
-			// Get the DOM elements for header and footer
-			const gameHeader = document.getElementById('game-header');
-			const uiPanel = document.getElementById('ui-panel');
-			const gameContainer = document.getElementById('game-container');
+			if (!RESIZE_DOM_CACHE) {
+				const wrapper = document.getElementById('screen-wrapper');
+				const scaler = document.getElementById('map-scaler');
+				const gameScreen = document.getElementById('game-screen');
+				const gameHeader = document.getElementById('game-header');
+				const uiPanel = document.getElementById('ui-panel');
+				const gameContainer = document.getElementById('game-container');
 
-			if (!wrapper || !scaler || !gameScreen || !gameHeader || !uiPanel || !gameContainer) return;
+				if (!wrapper || !scaler || !gameScreen || !gameHeader || !uiPanel || !gameContainer) return;
+
+				RESIZE_DOM_CACHE = {
+					wrapper,
+					scaler,
+					gameScreen,
+					gameHeader,
+					uiPanel,
+					gameContainer
+				};
+			}
+			const { wrapper, scaler, gameScreen, gameHeader, uiPanel, gameContainer } = RESIZE_DOM_CACHE;
 
 			// 1. Reset transform to measure the natural size
 			scaler.style.transform = 'none';
