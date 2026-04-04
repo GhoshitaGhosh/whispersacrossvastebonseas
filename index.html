@@ -1133,7 +1133,55 @@
     </div>
 
     <script>
-        console.log("W.A.V.E.S. - Initializing...");
+        const LOG_LEVELS = {
+            DEBUG: 0,
+            INFO: 1,
+            WARN: 2,
+            ERROR: 3,
+            CRITICAL: 4
+        };
+
+        const Logger = {
+            level: LOG_LEVELS.DEBUG,
+
+            _formatMessage: function(levelName, context, message) {
+                const now = new Date();
+                const timeString = now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
+                return `[${timeString}] [${levelName}] [${context}] ${message}`;
+            },
+
+            debug: function(context, message) {
+                if (this.level <= LOG_LEVELS.DEBUG) {
+                    console.debug(this._formatMessage('DEBUG', context, message));
+                }
+            },
+
+            info: function(context, message) {
+                if (this.level <= LOG_LEVELS.INFO) {
+                    console.info(this._formatMessage('INFO', context, message));
+                }
+            },
+
+            warn: function(context, message) {
+                if (this.level <= LOG_LEVELS.WARN) {
+                    console.warn(this._formatMessage('WARN', context, message));
+                }
+            },
+
+            error: function(context, message) {
+                if (this.level <= LOG_LEVELS.ERROR) {
+                    console.error(this._formatMessage('ERROR', context, message));
+                }
+            },
+
+            critical: function(context, message) {
+                if (this.level <= LOG_LEVELS.CRITICAL) {
+                    console.error(this._formatMessage('CRITICAL', context, message));
+                }
+            }
+        };
+
+        Logger.info('CORE', "W.A.V.E.S. - Initializing...");
 
         // --- 1. CONFIGURATION ---
 
@@ -1228,7 +1276,7 @@
 
                 // 3. Start Drone if needed (and not already playing/stopping)
                 if (targetVol > 0 && !this.dreadDroneNodes) {
-                    console.log(`[Audio] Starting Dread Drone. Vol: ${targetVol.toFixed(2)}`);
+                    Logger.info('AUDIO', `Starting Dread Drone. Vol: ${targetVol.toFixed(2)}`);
                     
                     const carrier = this.ctx.createOscillator();
                     carrier.type = 'sawtooth'; 
@@ -1274,7 +1322,7 @@
                     if (targetVol > 0) {
                         // --- PLAYING ---
                         if (this.dreadDroneNodes.isStopping) {
-                            console.log("[Audio] Drone revived from fade-out.");
+                            Logger.info('AUDIO', "Drone revived from fade-out.");
                             this.dreadDroneNodes.isStopping = false;
                             if (this.dreadDroneNodes.stopTimer) {
                                 clearTimeout(this.dreadDroneNodes.stopTimer);
@@ -1289,7 +1337,7 @@
                     } else {
                         // --- STOPPING ---
                         if (!this.dreadDroneNodes.isStopping) {
-                            console.log("[Audio] Fading out Dread Drone...");
+                            Logger.info('AUDIO', "Fading out Dread Drone...");
                             this.dreadDroneNodes.isStopping = true;
                             
                             // Force a hard fade out
@@ -1303,7 +1351,7 @@
                             // Schedule cleanup
                             nodes.stopTimer = setTimeout(() => {
                                 if (nodes.isStopping) { // Only kill if still stopping
-                                    console.log("[Audio] Dread Drone disconnected.");
+                                    Logger.info('AUDIO', "Dread Drone disconnected.");
                                     nodes.carrier.stop();
                                     nodes.lfo.stop();
                                     nodes.masterGain.disconnect();
@@ -1736,34 +1784,34 @@
             
             // 1. Check MAP_TEMPLATE
             if (MAP_TEMPLATE.length !== CONFIG.MAP_HEIGHT) {
-                console.error(`VALIDATION FAILED: MAP_TEMPLATE has ${MAP_TEMPLATE.length} rows, but CONFIG.MAP_HEIGHT is ${CONFIG.MAP_HEIGHT}.`);
+                Logger.error('MAP', `VALIDATION FAILED: MAP_TEMPLATE has ${MAP_TEMPLATE.length} rows, but CONFIG.MAP_HEIGHT is ${CONFIG.MAP_HEIGHT}.`);
                 isValid = false;
             }
             for (let i = 0; i < MAP_TEMPLATE.length; i++) {
                 const row = MAP_TEMPLATE[i];
                 if (row.length !== CONFIG.MAP_WIDTH) {
-                    console.error(`VALIDATION FAILED: MAP_TEMPLATE row ${i} has ${row.length} chars, but CONFIG.MAP_WIDTH is ${CONFIG.MAP_WIDTH}.`);
-                    console.error(`Problematic row: "${row}"`);
+                    Logger.error('MAP', `VALIDATION FAILED: MAP_TEMPLATE row ${i} has ${row.length} chars, but CONFIG.MAP_WIDTH is ${CONFIG.MAP_WIDTH}.`);
+                    Logger.error('MAP', `Problematic row: "${row}"`);
                     isValid = false;
                 }
             }
 
             // 2. Check HORROR_FLASH_ART
             if (HORROR_FLASH_ART.length !== CONFIG.MAP_HEIGHT) {
-                console.error(`VALIDATION FAILED: HORROR_FLASH_ART has ${HORROR_FLASH_ART.length} rows, but CONFIG.MAP_HEIGHT is ${CONFIG.MAP_HEIGHT}.`);
+                Logger.error('MAP', `VALIDATION FAILED: HORROR_FLASH_ART has ${HORROR_FLASH_ART.length} rows, but CONFIG.MAP_HEIGHT is ${CONFIG.MAP_HEIGHT}.`);
                 isValid = false;
             }
             for (let i = 0; i < HORROR_FLASH_ART.length; i++) {
                 const row = HORROR_FLASH_ART[i];
                 if (row.length !== CONFIG.MAP_WIDTH) {
-                    console.error(`VALIDATION FAILED: HORROR_FLASH_ART row ${i} has ${row.length} chars, but CONFIG.MAP_WIDTH is ${CONFIG.MAP_WIDTH}.`);
-                    console.error(`Problematic row: "${row}"`);
+                    Logger.error('MAP', `VALIDATION FAILED: HORROR_FLASH_ART row ${i} has ${row.length} chars, but CONFIG.MAP_WIDTH is ${CONFIG.MAP_WIDTH}.`);
+                    Logger.error('MAP', `Problematic row: "${row}"`);
                     isValid = false;
                 }
             }
             
             if (isValid) {
-                console.log("Constant validation successful: All dimensions (40x20) match.");
+                Logger.info('MAP', "Constant validation successful: All dimensions (40x20) match.");
             } else {
                 gameScreen.innerHTML = "CRITICAL ERROR: Map data mismatch. Check console (F12) for details.";
             }
@@ -2163,7 +2211,7 @@
          */
         function initMap() {
             if (MAP_TEMPLATE.length !== CONFIG.MAP_HEIGHT) {
-                console.error(`CRITICAL: Map template has ${MAP_TEMPLATE.length} rows, but CONFIG.MAP_HEIGHT is ${CONFIG.MAP_HEIGHT}!`);
+                Logger.critical('MAP', `Map template has ${MAP_TEMPLATE.length} rows, but CONFIG.MAP_HEIGHT is ${CONFIG.MAP_HEIGHT}!`);
                 return false;
             }
 
@@ -2188,8 +2236,8 @@
             for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
                 const row = MAP_TEMPLATE[y];
                 if (row.length !== CONFIG.MAP_WIDTH) {
-                    console.error(`CRITICAL: Map template row ${y} has width ${row.length}, but CONFIG.MAP_WIDTH is ${CONFIG.MAP_WIDTH}!`);
-                    console.error(`Problematic row: "${row}"`);
+                    Logger.critical('MAP', `Map template row ${y} has width ${row.length}, but CONFIG.MAP_WIDTH is ${CONFIG.MAP_WIDTH}!`);
+                    Logger.error('MAP', `Problematic row: "${row}"`);
                     return false;
                 }
                 
@@ -2533,7 +2581,7 @@
 		 * Resets the entire game state for a new run.
 		 */
 		function resetGame() {
-			console.log("Resetting Game...");
+			Logger.info('CORE', "Resetting Game...");
 
 			// 1. Reset Entities
 			GAME_STATE.villagers = [];
@@ -3759,14 +3807,14 @@
 		const ENEMY_AI_LOGGING_ENABLED = false;
         function logAI(state, enemy, message) {
             if (ENEMY_AI_LOGGING_ENABLED) {
-                console.log(`[${state}] ${enemy.id}: ${message}`);
+                Logger.debug('AI', `[ENEMY ${state}] ${enemy.id}: ${message}`);
             }
         }
         
         const VILLAGER_AI_LOGGING_ENABLED = false;
         function logVillagerAI(state, villager, message) {
             if (VILLAGER_AI_LOGGING_ENABLED) {
-                console.log(`[VILLAGER ${state}] ${villager.id}: ${message}`);
+                Logger.debug('AI', `[VILLAGER ${state}] ${villager.id}: ${message}`);
             }
         }
 		
@@ -4529,7 +4577,7 @@
                     break;
                 default:
                     // Failsafe: If state is unknown, reset to IDLE
-                    console.warn(`Enemy ${enemy.id} in unknown state: ${enemy.state}`);
+                    Logger.warn('AI', `Enemy ${enemy.id} in unknown state: ${enemy.state}`);
                     enemy.state = ENEMY_STATES.IDLE;
                     enemy.nextMove = 1000; // Wait 1s
                     break;
@@ -7340,7 +7388,7 @@
             // 1. Get cost object from CONFIG
             const cost = CONFIG.BUILD_COSTS[Symbol.for(structureType)];
             if (!cost) {
-                console.error(`CRITICAL: No build cost defined for ${structureType}`);
+                Logger.critical('BUILD', `No build cost defined for ${structureType}`);
                 return;
             }
 			
