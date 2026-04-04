@@ -4125,8 +4125,8 @@
             }
             
             GAME_STATE.structures = GAME_STATE.structures.filter(s => s.id !== structure.id);
+            GAME_STATE.map[structure.y][structure.x] = CONFIG.TILES.RUBBLE;
             GAME_STATE.needsRender = true;
-            // TODO: Add rubble/debris where it was?
         }
         
         /**
