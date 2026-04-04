@@ -3311,10 +3311,13 @@
             const dreadDebuffsList = document.getElementById('dread-debuffs-list');
             
             // --- 1. Update Villager List ---
-            villagerList.innerHTML = ''; // Clear old list
+            villagerList.textContent = ''; // Clear old list
             
             if (GAME_STATE.villagers.length === 0) {
-                 villagerList.innerHTML = '<li class="villager-status-item">All villagers are lost.</li>';
+                 const li = document.createElement('li');
+                 li.className = 'villager-status-item';
+                 li.textContent = 'All villagers are lost.';
+                 villagerList.appendChild(li);
             } else {
                 for (const v of GAME_STATE.villagers) {
                     const li = document.createElement('li');
@@ -3323,11 +3326,22 @@
                     const stateName = VILLAGER_STATE_NAMES[v.state] || v.state;
                     const healthClass = (v.state === 'panicked') ? 'health panicked' : 'health';
                     
-                    li.innerHTML = `
-                        <span class="name">Villager ${v.id}</span>
-                        <span class="state">${stateName}</span>
-                        <span class="${healthClass}">${v.hp} HP</span>
-                    `;
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'name';
+                    nameSpan.textContent = `Villager ${v.id}`;
+
+                    const stateSpan = document.createElement('span');
+                    stateSpan.className = 'state';
+                    stateSpan.textContent = stateName;
+
+                    const healthSpan = document.createElement('span');
+                    healthSpan.className = healthClass;
+                    healthSpan.textContent = `${v.hp} HP`;
+
+                    li.appendChild(nameSpan);
+                    li.appendChild(stateSpan);
+                    li.appendChild(healthSpan);
+
                     villagerList.appendChild(li);
                 }
             }
@@ -3347,12 +3361,14 @@
             moonIndicator.style.display = GAME_STATE.isMoonEventActive ? "block" : "none";
 
             // --- 4. Update Dread Sources ---
-            dreadSourcesList.innerHTML = '';
+            dreadSourcesList.textContent = '';
             let dreadSourcesCount = 0;
 			
 			// --- NEW: Low Food Dread ---
             if (GAME_STATE.inventory.food < 5) {
-                dreadSourcesList.innerHTML += `<li>Starvation Risk: +0.5/sec</li>`;
+                const li = document.createElement('li');
+                li.textContent = 'Starvation Risk: +0.5/sec';
+                dreadSourcesList.appendChild(li);
                 dreadSourcesCount++;
             }
             
@@ -3360,12 +3376,16 @@
             const idolCount = GAME_STATE.idols.length;
             if (idolCount > 0) {
                 const dreadRate = (idolCount * 1.5).toFixed(1);
-                dreadSourcesList.innerHTML += `<li>${idolCount} Idol(s) on map: +${dreadRate}/sec</li>`;
+                const li = document.createElement('li');
+                li.textContent = `${idolCount} Idol(s) on map: +${dreadRate}/sec`;
+                dreadSourcesList.appendChild(li);
                 dreadSourcesCount++;
             }
             
             if (GAME_STATE.player.isCarryingIdol) {
-                dreadSourcesList.innerHTML += `<li>Carrying Idol: +1.5/sec</li>`;
+                const li = document.createElement('li');
+                li.textContent = 'Carrying Idol: +1.5/sec';
+                dreadSourcesList.appendChild(li);
                 dreadSourcesCount++;
             }
             
@@ -3373,42 +3393,58 @@
                 let shriekerCount = GAME_STATE.enemies.filter(e => e.type === 'k').length;
                 if (shriekerCount > 0) {
                     const dreadRate = (shriekerCount * CONFIG.DREAD_PER_SHRIEKER_TICK).toFixed(1);
-                    dreadSourcesList.innerHTML += `<li>${shriekerCount} Shrieker(s): +${dreadRate}/sec</li>`;
+                    const li = document.createElement('li');
+                    li.textContent = `${shriekerCount} Shrieker(s): +${dreadRate}/sec`;
+                    dreadSourcesList.appendChild(li);
                     dreadSourcesCount++;
                 }
             } else if (GAME_STATE.isMoonEventActive) {
                 let unshelteredCount = GAME_STATE.villagers.filter(v => v.state !== 'sheltered').length;
                 if (unshelteredCount > 0) {
                     const dreadRate = (unshelteredCount * CONFIG.DREAD_PER_UNSHELTERED_VILLAGER).toFixed(1);
-                    dreadSourcesList.innerHTML += `<li>The Moon (x${unshelteredCount} Unsheltered): +${dreadRate}/sec</li>`;
+                    const li = document.createElement('li');
+                    li.textContent = `The Moon (x${unshelteredCount} Unsheltered): +${dreadRate}/sec`;
+                    dreadSourcesList.appendChild(li);
                     dreadSourcesCount++;
                 }
             }
             
             if (dreadSourcesCount === 0) {
-                dreadSourcesList.innerHTML = '<li>Sources: None</li>';
+                const li = document.createElement('li');
+                li.textContent = 'Sources: None';
+                dreadSourcesList.appendChild(li);
             }
             
             // --- 5. Update Dread Debuffs ---
-            dreadDebuffsList.innerHTML = '';
+            dreadDebuffsList.textContent = '';
             let debuffsCount = 0;
             
             if (GAME_STATE.dread > 0) {
-                dreadDebuffsList.innerHTML += '<li>Villager work speed reduced</li>';
-                dreadDebuffsList.innerHTML += '<li>Player attack speed reduced</li>';
+                const li1 = document.createElement('li');
+                li1.textContent = 'Villager work speed reduced';
+                dreadDebuffsList.appendChild(li1);
+                const li2 = document.createElement('li');
+                li2.textContent = 'Player attack speed reduced';
+                dreadDebuffsList.appendChild(li2);
                 debuffsCount++;
             }
             if (GAME_STATE.dread > 70) {
-                dreadDebuffsList.innerHTML += '<li>Strange Occurrences</li>';
+                const li = document.createElement('li');
+                li.textContent = 'Strange Occurrences';
+                dreadDebuffsList.appendChild(li);
                 debuffsCount++;
             }
             if (GAME_STATE.dread > 90) {
-                dreadDebuffsList.innerHTML += '<li>Sensory Distortion</li>';
+                const li = document.createElement('li');
+                li.textContent = 'Sensory Distortion';
+                dreadDebuffsList.appendChild(li);
                 debuffsCount++;
             }
             
             if (debuffsCount === 0) {
-                dreadDebuffsList.innerHTML = '<li>Debuffs: None</li>';
+                const li = document.createElement('li');
+                li.textContent = 'Debuffs: None';
+                dreadDebuffsList.appendChild(li);
             }
         }
 
