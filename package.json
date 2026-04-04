@@ -1,0 +1,8 @@
+{
+  "name": "waves-game",
+  "version": "1.0.0",
+  "description": "Atmospheric survival RTS with a horror twist",
+  "scripts": {
+    "test": "node tests/getDistance.test.js"
+  }
+}
