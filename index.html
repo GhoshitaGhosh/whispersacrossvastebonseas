@@ -2861,106 +2861,115 @@
 			triggerShake('extreme', 1000);
 		}
 		
-		/**
-		 * FINAL: Manages the Tutorial (Cycle 0) progression based on goals.
-		 */
-		function updateTutorial(deltaTime) {
-		const t = GAME_STATE.tutorial;
-		
-		updateDread(deltaTime); 
-		updateVillagers(deltaTime);
-		updateEnemies(deltaTime);
-		updateStructures(deltaTime);
-		
-		if (t.elderMessageCooldown > 0) t.elderMessageCooldown -= deltaTime;
-		
-		let nextStepReady = false;
-		const v2 = GAME_STATE.villagers.find(v => v.id === 2); 
-		const v3 = GAME_STATE.villagers.find(v => v.id === 3); 
-		const tower = GAME_STATE.structures.find(s => s.char === CONFIG.TILES.TOWER);
-		const constructionSite = GAME_STATE.constructionSites.find(cs => cs.targetChar === CONFIG.TILES.TOWER);
-
-		switch (t.step) {
-			case 0: // Goal: Gather 1 Wood
+const TUTORIAL_STEP_HANDLERS = [
+			// Step 0: Goal: Gather 1 Wood
+			(t) => {
 				if (GAME_STATE.inventory.wood >= 5) {
-					nextStepReady = true;
-					GAME_STATE.inventory.wood += 10; 
+					GAME_STATE.inventory.wood += 10;
 					logMessage("Elder: 'Good. Take these extra supplies from the stockpile.' (+10 Wood)", 'build');
+					return true;
 				}
-				break;
-				
-			case 1: // Goal: Villager Following
-				if (GAME_STATE.villagers.some(v => v.state === VILLAGER_STATES.FOLLOWING)) {
-					nextStepReady = true;
-				}
-				break;
-				
-			case 2: // Goal: Gather Stone (Check Inventory, not Villager State)
+				return false;
+			},
+			// Step 1: Goal: Villager Following
+			(t) => {
+				return GAME_STATE.villagers.some(v => v.state === VILLAGER_STATES.FOLLOWING);
+			},
+			// Step 2: Goal: Gather Stone (Check Inventory, not Villager State)
+			(t) => {
 				// Wait until we have at least one batch of stone (5)
 				if (GAME_STATE.inventory.stone >= 5) {
-					nextStepReady = true;
-					
 					// BONUS: Grant the rest of the stone needed for the Tower (Cost 10)
 					// We gathered 5, so give 5 more.
 					if (GAME_STATE.inventory.stone < 10) {
 						GAME_STATE.inventory.stone += 5;
 						logMessage("Elder: 'Excellent work. Here is the rest from our reserves.' (+5 Stone)", 'build');
 					}
+					return true;
 				}
-				break;
-				
-			case 3: // Goal: Open Build Mode (Wait for player to press B)
-				if (GAME_STATE.isBuildMode) nextStepReady = true;
-				break;
-				
-			case 4: // Goal: Place Construction Site
-				if (constructionSite) nextStepReady = true; 
-				break;
-				
-			case 5: // Goal: Tower Built
+				return false;
+			},
+			// Step 3: Goal: Open Build Mode (Wait for player to press B)
+			(t) => {
+				return GAME_STATE.isBuildMode;
+			},
+			// Step 4: Goal: Place Construction Site
+			(t) => {
+				const constructionSite = GAME_STATE.constructionSites.find(cs => cs.targetChar === CONFIG.TILES.TOWER);
+				return !!constructionSite;
+			},
+			// Step 5: Goal: Tower Built
+			(t) => {
+				const tower = GAME_STATE.structures.find(s => s.char === CONFIG.TILES.TOWER);
+				const constructionSite = GAME_STATE.constructionSites.find(cs => cs.targetChar === CONFIG.TILES.TOWER);
 				if (!constructionSite && tower) {
-					t.towerBuilt = true; 
-					nextStepReady = true;
+					t.towerBuilt = true;
+					return true;
 				}
-				break;
-				
-			case 6: // Goal: Tower Manned
-				 if (tower && tower.mannedBy !== null) nextStepReady = true; 
-				 break;
-				
-			case 7: // Goal: Alarm Rung
+				return false;
+			},
+			// Step 6: Goal: Tower Manned
+			(t) => {
+				const tower = GAME_STATE.structures.find(s => s.char === CONFIG.TILES.TOWER);
+				return tower && tower.mannedBy !== null;
+			},
+			// Step 7: Goal: Alarm Rung
+			(t) => {
 				if (GAME_STATE.isAlarmActive) {
 					if (!t.isHighTideTutorial) {
-						spawnTutorialEnemy('l', 1); 
+						spawnTutorialEnemy('l', 1);
 						t.isHighTideTutorial = true;
 					}
-					nextStepReady = true;
+					return true;
 				}
-				break;
-				
-			case 8: // Goal: Enemy Defeated
-				if (GAME_STATE.enemies.length === 0) nextStepReady = true; break;
-				
-			case 9: // Goal: All-Clear
-				if (!GAME_STATE.isAlarmActive) nextStepReady = true; break;
-				
-			case 10: // Goal: Rally Guard
+				return false;
+			},
+			// Step 8: Goal: Enemy Defeated
+			(t) => {
+				return GAME_STATE.enemies.length === 0;
+			},
+			// Step 9: Goal: All-Clear
+			(t) => {
+				return !GAME_STATE.isAlarmActive;
+			},
+			// Step 10: Goal: Rally Guard
+			(t) => {
+				const v3 = GAME_STATE.villagers.find(v => v.id === 3);
 				if (v3 && v3.state === VILLAGER_STATES.IDLE) {
-					 nextStepReady = true;
-					 v3.target = null; 
-					 v3.path = null;
+					v3.target = null;
+					v3.path = null;
+					return true;
 				}
-				break;
-
-			case 11: // Elder Death
+				return false;
+			},
+			// Step 11: Elder Death
+			(t) => {
 				if (!t.elderIsDead && t.elderMessageCooldown <= 3000) {
 					const elder = GAME_STATE.villagers.find(v => v.id === t.elderId);
 					if (elder) {
-						triggerFinalEncounter(); 
+						triggerFinalEncounter();
 					}
 				}
-				if (GAME_STATE.enemies.length === 0 && t.elderMessageCooldown <= 0) nextStepReady = true;
-				break;
+				return GAME_STATE.enemies.length === 0 && t.elderMessageCooldown <= 0;
+			}
+		];
+
+		/**
+		 * FINAL: Manages the Tutorial (Cycle 0) progression based on goals.
+		 */
+		function updateTutorial(deltaTime) {
+		const t = GAME_STATE.tutorial;
+
+		updateDread(deltaTime);
+		updateVillagers(deltaTime);
+		updateEnemies(deltaTime);
+		updateStructures(deltaTime);
+
+		if (t.elderMessageCooldown > 0) t.elderMessageCooldown -= deltaTime;
+
+		let nextStepReady = false;
+		if (TUTORIAL_STEP_HANDLERS[t.step]) {
+			nextStepReady = TUTORIAL_STEP_HANDLERS[t.step](t);
 		}
 		
 		if (nextStepReady && t.elderMessageCooldown <= 0) {
