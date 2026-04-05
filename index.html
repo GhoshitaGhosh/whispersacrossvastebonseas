@@ -4184,8 +4184,16 @@ const TUTORIAL_STEP_HANDLERS = [
             }
             
             GAME_STATE.structures = GAME_STATE.structures.filter(s => s.id !== structure.id);
+
+            if (structure.y >= 0 && structure.y < CONFIG.MAP_HEIGHT &&
+                structure.x >= 0 && structure.x < CONFIG.MAP_WIDTH) {
+                const baseTile = GAME_STATE.map[structure.y][structure.x];
+                if (baseTile !== CONFIG.TILES.WATER && baseTile !== CONFIG.TILES.MOUNTAIN) {
+                    GAME_STATE.map[structure.y][structure.x] = CONFIG.TILES.RUBBLE;
+                }
+            }
+
             GAME_STATE.needsRender = true;
-            // TODO: Add rubble/debris where it was?
         }
         
         /**
