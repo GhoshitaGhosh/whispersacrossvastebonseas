@@ -3826,6 +3826,17 @@ const TUTORIAL_STEP_HANDLERS = [
                 Logger.debug('AI', `[VILLAGER ${state}] ${villager.id}: ${message}`);
             }
         }
+
+        /**
+         * Centralized helper for villager movement.
+         */
+        function moveVillager(villager, nextStep, speedOverride = null) {
+            villager.x = nextStep.x;
+            villager.y = nextStep.y;
+            villager.path.shift();
+            GAME_STATE.needsRender = true;
+            villager.nextMove = speedOverride !== null ? speedOverride : CONFIG.VILLAGER_MOVE_SPEED_MS;
+        }
 		
 		/**
          * Triggers a 'hallucination' by flashing an enemy on a random empty tile.
@@ -5736,11 +5747,7 @@ const TUTORIAL_STEP_HANDLERS = [
                 }
                 
                 logVillagerAI("FOLLOWING", villager, `Following player to ${nextStep.x},${nextStep.y}.`); // New log
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             
             } else if (villager.path && villager.path.length <= 2) {
                 // We have a path, but it's very short (we are already adjacent).
@@ -5819,11 +5826,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             } else {
                 // Path failed
                 logVillagerAI("GATHERING", villager, "Cannot find path. -> IDLE");
@@ -5943,11 +5946,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             } else {
                 // Path failed or is blocked
                 logVillagerAI("FARMING", villager, "Cannot find path. -> IDLE");
@@ -6080,11 +6079,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             } else {
                 // Path failed
                 logVillagerAI("REPAIRING", villager, "Cannot find path. -> IDLE");
@@ -6198,11 +6193,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             } else {
                 // Path failed
                 logVillagerAI("BUILDING", villager, "Cannot find path. -> IDLE");
@@ -6271,11 +6262,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             } else {
                 // Path failed
                 logVillagerAI("MANNING", villager, "Cannot find path to tower. -> IDLE");
@@ -6398,11 +6385,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             } else {
                 logVillagerAI("SEEKING_HEALING", villager, "Cannot find path. -> IDLE");
                 villager.target.usedBy = null; // Release claim
@@ -6563,11 +6546,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                moveVillager(villager, nextStep);
             } else {
                 // Path failed
                 logVillagerAI("DESTROYING_IDOL", villager, "Cannot find path. -> IDLE");
@@ -6686,11 +6665,7 @@ const TUTORIAL_STEP_HANDLERS = [
                 if (villager.path && villager.path.length > 1) {
                     const nextStep = villager.path[1];
                     if (!isTileSolidForVillager(nextStep.x, nextStep.y)) {
-                        villager.x = nextStep.x;
-                        villager.y = nextStep.y;
-                        villager.path.shift();
-                        GAME_STATE.needsRender = true;
-                        villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                        moveVillager(villager, nextStep);
                     } else {
                          villager.path = null; 
                          villager.nextMove = 1000; // Blocked
@@ -6755,11 +6730,7 @@ const TUTORIAL_STEP_HANDLERS = [
                     if (villager.path && villager.path.length > 1) {
                          const nextStep = villager.path[1];
                         if (!isTileSolidForVillager(nextStep.x, nextStep.y)) {
-                            villager.x = nextStep.x;
-                            villager.y = nextStep.y;
-                            villager.path.shift();
-                            GAME_STATE.needsRender = true;
-                            villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS;
+                            moveVillager(villager, nextStep);
                         } else {
                              villager.path = null;
                              villager.nextMove = 1000;
@@ -6858,12 +6829,8 @@ const TUTORIAL_STEP_HANDLERS = [
                     return;
                 }
                 
-                villager.x = nextStep.x;
-                villager.y = nextStep.y;
-                villager.path.shift();
-                GAME_STATE.needsRender = true;
                 // Move faster when panicking
-                villager.nextMove = CONFIG.VILLAGER_MOVE_SPEED_MS * 0.75; 
+                moveVillager(villager, nextStep, CONFIG.VILLAGER_MOVE_SPEED_MS * 0.75);
             } else {
                 // Path failed
                 logVillagerAI(stateName, villager, "Cannot find path to shelter. -> IDLE");
@@ -8550,7 +8517,10 @@ const TUTORIAL_STEP_HANDLERS = [
 		}
 
         // Wait for fonts to load before starting, to ensure sizing is correct
-		document.fonts.ready.then(function() {
+		Promise.race([
+			document.fonts.ready,
+			new Promise(resolve => setTimeout(resolve, 2000))
+		]).then(function() {
 			main();
 			
 			// Force a recalculation after a short delay to handle layout shifts
