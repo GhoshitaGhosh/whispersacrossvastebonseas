@@ -8476,6 +8476,1218 @@ const TUTORIAL_STEP_HANDLERS = [
 
 			// 1. Reset transform to measure the natural size
 			scaler.style.transform = 'none';
+		let nextStepReady = false;
+		if (TUTORIAL_STEP_HANDLERS[t.step]) {
+			nextStepReady = TUTORIAL_STEP_HANDLERS[t.step](t);
+		}
+		
+		if (nextStepReady && t.elderMessageCooldown <= 0) {
+			t.step++;
+			t.canAdvance = true;
+		}
+		
+		if (t.canAdvance && t.elderMessageCooldown <= 0) {
+			handleElderMessages();
+			t.canAdvance = false;
+		}
+
+		if (t.step >= 12 && GAME_STATE.enemies.length === 0) {
+			GAME_STATE.inventory.wood += 20;
+			GAME_STATE.inventory.stone += 10;
+			GAME_STATE.inventory.food += 20;
+			logMessage("You salvage supplies from the aftermath. (+20W, +10S, +20F)", 5000);
+			logMessage("Cycle 1 begins. The sea is waiting...", 'warning', 10000);
+			setObjective("");
+			GAME_STATE.phase = 'PLAYING';
+			GAME_STATE.tide.cycle = 0;
+			GAME_STATE.tide.isHighTide = false; // FORCE Low Tide
+			GAME_STATE.tide.timer = CONFIG.LOW_TIDE_DURATION_MS; // Reset Timer
+			GAME_STATE.tide.nextWaveCheck = 0; // Reset wave timer
+			GAME_STATE.isAlarmActive = false;
+			updateUI();
+		}
+	}
+
+
+        // --- 5. RENDERING (REFACTORED) ---
+
+        /**
+         * Gets the correct CSS class for a tile character.
+         */
+        function getTileClass(char) {
+            switch (char) {
+                case CONFIG.TILES.WATER: return 'tile-water';
+                case CONFIG.TILES.MOUNTAIN: return 'tile-mountain';
+                case CONFIG.TILES.FOREST: return 'tile-forest';
+                case CONFIG.TILES.FARM: return 'tile-farm';
+                case CONFIG.TILES.FARM_ACTIVE: return 'tile-farm-active';
+                case CONFIG.TILES.HOUSE: return 'tile-house';
+				case CONFIG.TILES.GATHERING_HUT: return 'tile-house';
+                case CONFIG.TILES.BELL: return 'tile-villager';
+                case CONFIG.TILES.RUBBLE: return 'tile-rubble';
+                case CONFIG.TILES.BEACH: return 'tile-beach';
+                case CONFIG.TILES.PLAYER: return 'tile-player';
+                case '+': return 'tile-build-mode';
+                case CONFIG.TILES.VILLAGER: return 'tile-villager';
+				case 'E': return 'tile-elder';
+                case CONFIG.TILES.ENEMY: return 'tile-enemy-e';
+                case CONFIG.TILES.ENEMY_LURKER: return 'tile-enemy-l';
+                case CONFIG.TILES.ENEMY_BRUTE: return 'tile-enemy-B';
+				case CONFIG.TILES.ENEMY_DEVIL_DOG: return 'tile-enemy-l';
+				case CONFIG.TILES.ENEMY_EXTRUDER: return 'tile-player'; // 'X'
+                case CONFIG.TILES.HIT_STUN: return 'tile-hit-stun';
+                case CONFIG.TILES.DAMAGED: return 'tile-damaged';
+                case CONFIG.TILES.EMPTY: return 'tile-empty';
+				case CONFIG.TILES.FLOTSAM: return 'tile-villager'; // Bright yellow
+                case CONFIG.TILES.IDOL: return 'tile-enemy-l'; // Sinister red
+
+                // --- NEW & CORRECTED ---
+                case CONFIG.TILES.TOWER_MANNED: return 'tile-tower-manned';
+                case CONFIG.TILES.INFIRMARY: return 'tile-health';
+                case CONFIG.TILES.CONSTRUCTION: return 'tile-build-mode';
+                case CONFIG.TILES.SPIKE_TRAP: return 'tile-rubble'; // Low-profile is good
+
+                // Group all defenses
+                case CONFIG.TILES.TOWER:
+                case CONFIG.TILES.PALISADE:
+                case CONFIG.TILES.PALISADE_H:
+                case CONFIG.TILES.WALL:
+                case CONFIG.TILES.DOOR: // Doors are part of a wall
+                    return 'tile-palisade'; 
+                // --- END ---
+                
+                default: return 'tile-default';
+            }
+        }
+        
+        /**
+         * Gets the display character (handling spaces).
+         */
+        function getTileDisplayChar(char) {
+            return (char === ' ' || char === null) ? '&nbsp;' : char;
+        }
+
+        /**
+         * Renders the entire game state to the screen using DOM diffing.
+         */
+        function render() {
+            if (!GAME_STATE.isInitialized) {
+                return; 
+            }
+            
+            // 1. Create a 2D grid from the base map (new state)
+            let renderGrid = GAME_STATE.map.map(row => [...row]);
+			
+			// Priority 1.5: Stamp Flotsam and Idols
+            for (const f of GAME_STATE.flotsam) {
+                if (f.y >= 0 && f.y < CONFIG.MAP_HEIGHT && f.x >= 0 && f.x < CONFIG.MAP_WIDTH) {
+                    renderGrid[f.y][f.x] = CONFIG.TILES.FLOTSAM;
+                }
+            }
+            for (const i of GAME_STATE.idols) {
+                if (i.y >= 0 && i.y < CONFIG.MAP_HEIGHT && i.x >= 0 && i.x < CONFIG.MAP_WIDTH) {
+                    renderGrid[i.y][i.x] = CONFIG.TILES.IDOL;
+                }
+            }
+
+            // 2. Stamp structures onto the grid
+            for (const s of GAME_STATE.structures) {
+                if (s.y >= 0 && s.y < CONFIG.MAP_HEIGHT && s.x >= 0 && s.x < CONFIG.MAP_WIDTH) {
+					
+                    if (s.char === CONFIG.TILES.FARM && s.farmedBy !== null) {
+                        renderGrid[s.y][s.x] = CONFIG.TILES.FARM_ACTIVE;
+                    }
+                    // --- THIS IS THE FIX ---
+                    // NEW: Check if tower is manned
+                    else if (s.char === CONFIG.TILES.TOWER && s.mannedBy !== null) { // Was 'if'
+                    // --- END FIX ---
+                        renderGrid[s.y][s.x] = CONFIG.TILES.TOWER_MANNED;
+                    }
+                    // NEW: Check for damage
+                    else if (s.hp < s.maxHp * 0.5) {
+                        renderGrid[s.y][s.x] = CONFIG.TILES.DAMAGED;
+                    } else {
+                        renderGrid[s.y][s.x] = s.char;
+                    }
+                }
+            }
+            
+            // --- THIS IS THE FIX ---
+            // 2.5. Stamp Construction Sites onto the grid
+            for (const cs of GAME_STATE.constructionSites) {
+                if (cs.y >= 0 && cs.y < CONFIG.MAP_HEIGHT && cs.x >= 0 && cs.x < CONFIG.MAP_WIDTH) {
+                    renderGrid[cs.y][cs.x] = CONFIG.TILES.CONSTRUCTION; // 'c'
+                }
+            }
+            // --- END FIX ---
+            
+            // 3. Stamp villagers onto the grid (only if not sheltered)
+            for (const v of GAME_STATE.villagers) {
+                if (v.state !== 'sheltered' && v.y >= 0 && v.y < CONFIG.MAP_HEIGHT && v.x >= 0 && v.x < CONFIG.MAP_WIDTH) {
+                    if (GAME_STATE.phase === 'TUTORIAL' && v.id === GAME_STATE.tutorial.elderId) {
+						renderGrid[v.y][v.x] = 'E'; // Use special char for Elder
+					} else {
+						renderGrid[v.y][v.x] = CONFIG.TILES.VILLAGER;
+					}
+                }
+            }
+
+            // 4. Stamp enemies onto the grid
+            for (const e of GAME_STATE.enemies) {
+                if (e.y >= 0 && e.y < CONFIG.MAP_HEIGHT && e.x >= 0 && e.x < CONFIG.MAP_WIDTH) {
+                    renderGrid[e.y][e.x] = e.char; // This will show '*' if stunned
+                }
+            }
+            
+            // 5. Stamp player onto the grid (must be last to draw over items)
+            if (GAME_STATE.player.hp > 0) { // Only draw player if alive
+                const p = GAME_STATE.player;
+                const playerChar = GAME_STATE.isBuildMode ? '+' : p.char;
+                if (p.y >= 0 && p.y < CONFIG.MAP_HEIGHT && p.x >= 0 && p.x < CONFIG.MAP_WIDTH) {
+                    renderGrid[p.y][p.x] = playerChar;
+                }
+            }
+
+            // 6. Compare renderGrid to renderBuffer and update only changed tiles
+            for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
+				for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
+					const newChar = renderGrid[y][x];
+
+					// Find structure and reinforcement status
+					const struct = GAME_STATE.structures.find(s => s.x === x && s.y === y);
+					const isReinforced = struct ? struct.isReinforced : false;
+
+					// --- FIX: Create a unique key that includes reinforcement status ---
+					let bufferKey = newChar;
+					if (isReinforced) {
+						bufferKey += '_R'; // Example: '|' becomes '|_R' if reinforced
+					}
+					
+					// Now, compare the new key against the buffer
+					if (bufferKey !== GAME_STATE.renderBuffer[y][x]) {
+						const span = document.getElementById(`tile-${y}-${x}`);
+						if (span) {
+							span.innerHTML = getTileDisplayChar(newChar);
+							
+							// Apply the correct class based on the current state
+							if (isReinforced) {
+								span.className = 'tile-reinforced';
+							} else {
+								// CRITICAL: If not reinforced, ensure we apply the standard color class
+								span.className = getTileClass(newChar);
+							}
+							
+							GAME_STATE.renderBuffer[y][x] = bufferKey; // Store the new, unique key
+						}
+					}
+				}
+			}
+            
+            // 7. Reset the render flag
+            GAME_STATE.needsRender = false;
+        }
+        
+        /**
+         * Updates all UI elements with current game state.
+         * NEW: Also updates visual VFX overlays (fog, vignette, etc.)
+         */
+        function updateUI() {
+            // --- 1. Standard UI Panels (HP, Resources, etc.) ---
+            
+            resourceWood.textContent = GAME_STATE.inventory.wood;
+            resourceStone.textContent = GAME_STATE.inventory.stone;
+			resourceFood.textContent = GAME_STATE.inventory.food;
+            
+            playerHpValue.textContent = GAME_STATE.player.hp;
+            if (GAME_STATE.player.hp < CONFIG.PLAYER_MAX_HP * 0.3) {
+                playerHpUI.classList.add('player-hurt');
+            } else {
+                playerHpUI.classList.remove('player-hurt');
+            }
+			
+            dreadValue.textContent = Math.floor(GAME_STATE.dread);
+            if (GAME_STATE.dread > 50) {
+                dreadValue.parentElement.classList.add('high-tide');
+            } else {
+                dreadValue.parentElement.classList.remove('high-tide');
+            }
+
+            if (GAME_STATE.dread > 70) resourceWood.classList.add('ui-flicker');
+            else resourceWood.classList.remove('ui-flicker');
+            
+            if (GAME_STATE.dread > 85) resourceStone.classList.add('ui-flicker');
+            else resourceStone.classList.remove('ui-flicker');
+            
+            if (GAME_STATE.dread > 95) playerHpValue.classList.add('ui-flicker');
+            else playerHpValue.classList.remove('ui-flicker');
+
+            // Tide Status
+            const minutes = Math.floor(GAME_STATE.tide.timer / 60000);
+            const seconds = Math.floor((GAME_STATE.tide.timer % 60000) / 1000);
+            const newTimerText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (tideTimer.textContent !== newTimerText) tideTimer.textContent = newTimerText;
+            
+            if (GAME_STATE.tide.isHighTide) {
+                if (tideStatus.textContent !== "HIGH TIDE") {
+                    tideStatus.textContent = "HIGH TIDE";
+                    uiStatus.classList.add('high-tide');
+                }
+            } else {
+                if (tideStatus.textContent !== "LOW TIDE") {
+                    tideStatus.textContent = "LOW TIDE";
+                    uiStatus.classList.remove('high-tide');
+                }
+            }
+            
+            // Player Mode
+            let newModeText;
+            if (GAME_STATE.isBuildMode) {
+                const item = CONFIG.BUILD_COSTS[Symbol.for(GAME_STATE.selectedStructure)];
+                newModeText = `Build: ${item.name}`;
+            } else {
+                newModeText = "Explore";
+            }
+            if (playerMode.textContent !== newModeText) playerMode.textContent = newModeText;
+            
+            // Update the sidebar panel
+            updateStatusPanel();
+			
+			const meleeBar = document.getElementById('melee-cooldown-bar');
+			const rangedBar = document.getElementById('ranged-cooldown-bar');
+			
+			if (meleeBar && rangedBar) {
+				const now = performance.now();
+				
+				// --- MELEE (E) COOLDOWN Calculation ---
+				const meleeReadyTime = GAME_STATE.player.nextAttackReady;
+				const meleeCooldown = CONFIG.PLAYER_ATTACK_COOLDOWN_MS;
+				const dreadPenalty = (GAME_STATE.dread / CONFIG.DREAD_MAX) * 0.25;
+				const finalMeleeCooldown = meleeCooldown * (1.0 + dreadPenalty);
+
+				let meleePercent = 0;
+				if (now < meleeReadyTime) {
+					const timeLeft = meleeReadyTime - now;
+					meleePercent = (timeLeft / finalMeleeCooldown) * 100; // Remaining percentage
+				}
+				
+				// --- RANGED (Q) COOLDOWN Calculation ---
+				const rangedReadyTime = GAME_STATE.player.nextRangedReady;
+				const rangedCooldown = CONFIG.PLAYER_RANGED_COOLDOWN_MS;
+				
+				let rangedPercent = 0;
+				if (now < rangedReadyTime) {
+					const timeLeft = rangedReadyTime - now;
+					rangedPercent = (timeLeft / rangedCooldown) * 100; // Remaining percentage
+				}
+
+				// --- Apply Width and Status Classes ---
+				
+				// Melee
+				const meleeFill = meleeBar.querySelector('.cooldown-fill');
+				if (meleeFill) {
+					// Width is set to the inverse (100% - remaining percent)
+					meleeFill.style.width = `${100 - meleePercent}%`; 
+				}
+				meleeBar.classList.toggle('ready', meleePercent <= 0);
+				
+				// Ranged
+				const rangedFill = rangedBar.querySelector('.cooldown-fill');
+				if (rangedFill) {
+					rangedFill.style.width = `${100 - rangedPercent}%`;
+				}
+				rangedBar.classList.toggle('ready', rangedPercent <= 0);
+			}
+            
+            // --- 2. NEW: VISUAL EFFECTS ---
+
+            const fogOverlay = document.getElementById('fog-overlay');
+            const vignetteOverlay = document.getElementById('vignette-overlay');
+            const damageOverlay = document.getElementById('damage-overlay');
+            
+            let fogPercent = 0.0; // This is our 0.0 to 1.0 ramp value
+            
+            if (GAME_STATE.tide.isHighTide) {
+                // During High Tide, fog is at 100% of its max.
+                fogPercent = 1.0;
+            } else {
+                // During ALL Low Tides (Cycle 0, 1, 2, etc.)
+                
+                const timeElapsed = CONFIG.LOW_TIDE_DURATION_MS - GAME_STATE.tide.timer;
+                const tidePercentComplete = timeElapsed / CONFIG.LOW_TIDE_DURATION_MS;
+                const fogRampUpStartPercent = 0.9;
+
+                if (tidePercentComplete >= fogRampUpStartPercent) {
+                    // --- RAMP-UP PHASE (Last 10% of Low Tide) ---
+                    // We are in the last 10% of Low Tide.
+                    const progressIntoRamp = tidePercentComplete - fogRampUpStartPercent;
+                    const rampDuration = 1.0 - fogRampUpStartPercent;
+                    fogPercent = progressIntoRamp / rampDuration;
+                } else {
+                    // --- STEADY STATE (First 90% of Low Tide) ---
+                    // No fog.
+                    fogPercent = 0.0;
+                }
+            }
+            
+            // --- Apply the final opacity (Unchanged) ---
+            const minFogOpacity = 0.0;
+            const maxFogOpacity = 0.1; // Your 10% max
+            
+            let newOpacity = minFogOpacity + (fogPercent * (maxFogOpacity - minFogOpacity));
+            
+            if (newOpacity > maxFogOpacity) newOpacity = maxFogOpacity;
+            if (newOpacity < minFogOpacity) newOpacity = minFogOpacity;
+            
+            fogOverlay.style.opacity = newOpacity;
+            
+
+            // 2. Vignette Logic
+            const dreadPercent = GAME_STATE.dread / CONFIG.DREAD_MAX;
+            const vignetteSpread = dreadPercent * 150; // 0px -> 150px
+            const vignetteOpacity = dreadPercent * 0.7; // 0% -> 70%
+            
+            vignetteOverlay.style.boxShadow = `inset 0 0 100px ${vignetteSpread}px rgba(0,0,0,1)`;
+            vignetteOverlay.style.opacity = vignetteOpacity;
+
+            // 3. Damage Logic
+            if (GAME_STATE.player.hp < 30) {
+                // Pulse the opacity based on health
+                // At 30HP, it's 0. At 1HP, it's 1.0
+                const damageOpacity = 1 - (GAME_STATE.player.hp / 30);
+                damageOverlay.style.opacity = damageOpacity;
+            } else {
+                damageOverlay.style.opacity = 0; // No effect
+            }
+        }
+		
+		/**
+         * Updates the new sidebar status panel.
+         */
+        function updateStatusPanel() {
+            // Don't update if we're in build mode (it's hidden)
+            if (GAME_STATE.isBuildMode) return;
+			
+			// Don't update if corrupted
+            if (GAME_STATE.areSidebarsCorrupted) return;
+            
+            // Get all the DOM elements
+            const villagerList = document.getElementById('villager-status-list');
+            const alarmIndicator = document.getElementById('alarm-status-indicator');
+            const moonIndicator = document.getElementById('moon-status-indicator');
+            const dreadSourcesList = document.getElementById('dread-sources-list');
+            const dreadDebuffsList = document.getElementById('dread-debuffs-list');
+            
+            // --- 1. Update Villager List ---
+            villagerList.innerHTML = ''; // Clear old list
+            
+            if (GAME_STATE.villagers.length === 0) {
+                 villagerList.innerHTML = '<li class="villager-status-item">All villagers are lost.</li>';
+            } else {
+                for (const v of GAME_STATE.villagers) {
+                    const li = document.createElement('li');
+                    li.className = 'villager-status-item';
+                    
+                    const stateName = VILLAGER_STATE_NAMES[v.state] || v.state;
+                    const healthClass = (v.state === 'panicked') ? 'health panicked' : 'health';
+                    
+                    li.innerHTML = `
+                        <span class="name">Villager ${v.id}</span>
+                        <span class="state">${stateName}</span>
+                        <span class="${healthClass}">${v.hp} HP</span>
+                    `;
+                    villagerList.appendChild(li);
+                }
+            }
+            
+            // --- 2. Update Alarm Status ---
+            if (GAME_STATE.isAlarmActive) {
+                alarmIndicator.textContent = "Alarm is Ringing";
+                alarmIndicator.className = "status-indicator negative";
+                alarmIndicator.style.display = "block";
+            } else {
+                alarmIndicator.textContent = "All-Clear";
+                alarmIndicator.className = "status-indicator positive";
+                alarmIndicator.style.display = "block";
+            }
+            
+            // --- 3. Update Moon Event ---
+            moonIndicator.style.display = GAME_STATE.isMoonEventActive ? "block" : "none";
+
+            // --- 4. Update Dread Sources ---
+            dreadSourcesList.innerHTML = '';
+            let dreadSourcesCount = 0;
+			
+			// --- NEW: Low Food Dread ---
+            if (GAME_STATE.inventory.food < 5) {
+                dreadSourcesList.innerHTML += `<li>Starvation Risk: +0.5/sec</li>`;
+                dreadSourcesCount++;
+            }
+            
+            // --- Check for Idols ---
+            const idolCount = GAME_STATE.idols.length;
+            if (idolCount > 0) {
+                const dreadRate = (idolCount * 1.5).toFixed(1);
+                dreadSourcesList.innerHTML += `<li>${idolCount} Idol(s) on map: +${dreadRate}/sec</li>`;
+                dreadSourcesCount++;
+            }
+            
+            if (GAME_STATE.player.isCarryingIdol) {
+                dreadSourcesList.innerHTML += `<li>Carrying Idol: +1.5/sec</li>`;
+                dreadSourcesCount++;
+            }
+            
+            if (GAME_STATE.tide.isHighTide) {
+                let shriekerCount = GAME_STATE.enemies.filter(e => e.type === 'k').length;
+                if (shriekerCount > 0) {
+                    const dreadRate = (shriekerCount * CONFIG.DREAD_PER_SHRIEKER_TICK).toFixed(1);
+                    dreadSourcesList.innerHTML += `<li>${shriekerCount} Shrieker(s): +${dreadRate}/sec</li>`;
+                    dreadSourcesCount++;
+                }
+            } else if (GAME_STATE.isMoonEventActive) {
+                let unshelteredCount = GAME_STATE.villagers.filter(v => v.state !== 'sheltered').length;
+                if (unshelteredCount > 0) {
+                    const dreadRate = (unshelteredCount * CONFIG.DREAD_PER_UNSHELTERED_VILLAGER).toFixed(1);
+                    dreadSourcesList.innerHTML += `<li>The Moon (x${unshelteredCount} Unsheltered): +${dreadRate}/sec</li>`;
+                    dreadSourcesCount++;
+                }
+            }
+            
+            if (dreadSourcesCount === 0) {
+                dreadSourcesList.innerHTML = '<li>Sources: None</li>';
+            }
+            
+            // --- 5. Update Dread Debuffs ---
+            dreadDebuffsList.innerHTML = '';
+            let debuffsCount = 0;
+            
+            if (GAME_STATE.dread > 0) {
+                dreadDebuffsList.innerHTML += '<li>Villager work speed reduced</li>';
+                dreadDebuffsList.innerHTML += '<li>Player attack speed reduced</li>';
+                debuffsCount++;
+            }
+            if (GAME_STATE.dread > 70) {
+                dreadDebuffsList.innerHTML += '<li>Strange Occurrences</li>';
+                debuffsCount++;
+            }
+            if (GAME_STATE.dread > 90) {
+                dreadDebuffsList.innerHTML += '<li>Sensory Distortion</li>';
+                debuffsCount++;
+            }
+            
+            if (debuffsCount === 0) {
+                dreadDebuffsList.innerHTML = '<li>Debuffs: None</li>';
+            }
+        }
+
+        // --- 6. GAME LOGIC ---
+        
+        /**
+         * NEW: Central function to apply damage to the player
+         */
+        function damagePlayer(amount, message) {
+            if (GAME_STATE.isGameOver) return;
+			
+			// --- NEW: Drop Idol on Hit ---
+            if (GAME_STATE.player.isCarryingIdol) {
+                GAME_STATE.player.isCarryingIdol = false;
+                logMessage("You are hit and drop the idol! It shatters.", 'warning');
+                // The idol is destroyed
+            }
+            // --- END NEW ---
+            
+            GAME_STATE.player.hp -= amount;
+            if (message) {
+                logMessage(message, 'warning');
+            }
+
+            updateUI(); // Update HP immediately
+            playerHpUI.classList.add('player-hurt'); // Flash the HP
+            setTimeout(() => playerHpUI.classList.remove('player-hurt'), 500);
+			
+			// Centralized screen shake for ALL damage sources
+            if (amount > 0) {
+                triggerShake('hard', 200);
+            }
+            
+            if (GAME_STATE.player.hp <= 0) {
+                GAME_STATE.player.hp = 0; // Clamp
+                GAME_STATE.isGameOver = true;
+                showMessage("YOU ARE LOST", "Press [R] to Restart.", 0, false);
+            }
+            GAME_STATE.needsRender = true;
+        }
+
+        /**
+         * Helper function to get Manhattan distance between two points.
+         */
+        function getDistance(x1, y1, x2, y2) {
+            return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+        }
+		
+		/**
+         * NEW: Helper to check if a specific tile is adjacent to a point.
+         */
+        function findAdjacentTile(x, y, tileChar) {
+            const adjacentCoords = [
+                {x: x, y: y - 1}, {x: x, y: y + 1},
+                {x: x - 1, y: y}, {x: x + 1, y: y}
+            ];
+            
+            for (const coord of adjacentCoords) {
+                if (coord.y < 0 || coord.y >= CONFIG.MAP_HEIGHT || coord.x < 0 || coord.x >= CONFIG.MAP_WIDTH) continue;
+                // Check the base map
+                if (GAME_STATE.map[coord.y][coord.x] === tileChar) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        /**
+         * NEW: Helper function to find a shelter at a door
+         */
+         function findShelterAtDoor(doorX, doorY) {
+            // Check adjacent tiles for the structure
+            const adjacent = [
+                {x: doorX, y: doorY - 1}, {x: doorX, y: doorY + 1},
+                {x: doorX - 1, y: doorY}, {x: doorX + 1, y: doorY}
+            ];
+            for (const pos of adjacent) {
+                const structure = GAME_STATE.structures.find(s => s.x === pos.x && s.y === pos.y);
+                if (structure && (structure.char === CONFIG.TILES.HOUSE || structure.char === CONFIG.TILES.TOWER)) {
+                    return structure;
+                }
+            }
+            return null;
+         }
+         
+         /**
+          * REFACTORED: Helper function to find the door for a specific structure
+          * Prefers a 'D' tile, but falls back to any empty space.
+          */
+         function findDoorForStructure(structure) {
+            if (!structure) return null; // Failsafe
+            const { x, y } = structure;
+            const adjacent = [
+                {x: x, y: y - 1}, {x: x, y: y + 1},
+                {x: x - 1, y: y}, {x: x + 1, y: y}
+            ];
+
+            let preferredDoor = null;
+            let fallbackDoor = null;
+
+            for (const pos of adjacent) {
+                if (pos.y < 0 || pos.y >= CONFIG.MAP_HEIGHT || pos.x < 0 || pos.x >= CONFIG.MAP_WIDTH) continue;
+
+                // Priority 1: Find a 'D' tile
+                const door = GAME_STATE.structures.find(s => s.x === pos.x && s.y === pos.y && s.char === CONFIG.TILES.DOOR);
+                if (door) {
+                    preferredDoor = pos;
+                    break; // Found the best option
+                }
+                
+                // Priority 2: Find any empty, unblocked ground
+                // (Must not be another structure or a construction site)
+                if (GAME_STATE.map[pos.y][pos.x] === CONFIG.TILES.EMPTY) {
+                    const isBlocked = GAME_STATE.structures.some(s => s.x === pos.x && s.y === pos.y) ||
+                                      GAME_STATE.constructionSites.some(cs => cs.x === pos.x && cs.y === pos.y);
+                    
+                    if (!isBlocked) {
+                        fallbackDoor = pos;
+                    }
+					if (!isBlocked && !isTileSolidForVillager(pos.x, pos.y)) { // ADD THIS CHECK
+                        fallbackDoor = pos;
+                    }
+                }
+            }
+            return preferredDoor || fallbackDoor; // Return the 'D' tile, or the empty space if no 'D' exists
+         }
+		 
+		function getAggroTargetFor(enemy, type = null) {
+		  const R = CONFIG.ENEMY_AGGRO_RADIUS; // you already have this in CONFIG
+		  let best = null, bestDist = Infinity;
+
+		  // Player
+		  if (GAME_STATE.player.hp > 0) {
+			const d = getDistance(enemy.x, enemy.y, GAME_STATE.player.x, GAME_STATE.player.y);
+			if (d <= R && d < bestDist) {
+			  best = GAME_STATE.player; bestDist = d;
+			}
+		  }
+		  
+		  // --- NEW: Devil Dog only aggros player ---
+		  if (type === 'd') {
+			  return best; // Return *only* the player, or null
+		  }
+		  // --- END NEW ---
+		  
+		  // Unsheltered Villagers
+		  for (const v of GAME_STATE.villagers) {
+			if (v.state === 'sheltered') continue;
+			const d = getDistance(enemy.x, enemy.y, v.x, v.y);
+			if (d <= R && d < bestDist) {
+			  best = v; bestDist = d;
+			}
+		  }
+		  return best;
+		}
+
+		 
+		 /**
+         * NEW: A* Pathfinding Algorithm
+         * Finds the shortest path from 'start' {x, y} to 'end' {x, y}
+         * @param {object} start - The starting {x, y} coordinates.
+         * @param {object} end - The ending {x, y} coordinates.
+         * @param {string} pathingType - 'enemy', 'villager', or 'shrieker'.
+         * @returns {Array|null} - An array of {x, y} coords, or null if no path.
+         */
+        function findPath(start, end, pathingType) {
+            
+            // Choose the correct collision function based on the pathing type
+            let isSolidFunc;
+            if (pathingType === 'enemy') {
+                isSolidFunc = isTileSolidForEnemy;
+            } else if (pathingType === 'shrieker') {
+                isSolidFunc = isTileSolidForShrieker;
+            } else {
+                isSolidFunc = isTileSolidForVillager;
+            }
+            // --- END FIX ---
+            
+            // Helper function for A* node
+            function Node(parent, x, y) {
+                this.parent = parent;
+                this.x = x;
+                this.y = y;
+                
+                this.g = 0; // Distance from start
+                this.h = 0; // Heuristic distance to end
+                this.f = 0; // f = g + h
+            }
+
+            const mapSize = CONFIG.MAP_WIDTH * CONFIG.MAP_HEIGHT;
+            let openList = [];
+            let closedMap = new Uint8Array(mapSize);
+            let bestGMap = new Float64Array(mapSize);
+            bestGMap.fill(Infinity);
+
+            let startNode = new Node(null, start.x, start.y);
+            bestGMap[start.y * CONFIG.MAP_WIDTH + start.x] = 0;
+            openList.push(startNode);
+
+            while (openList.length > 0) {
+                
+                // Find node with lowest 'f'
+                let lowestIndex = 0;
+                for (let i = 1; i < openList.length; i++) {
+                    if (openList[i].f < openList[lowestIndex].f) {
+                        lowestIndex = i;
+                    }
+                }
+                let currentNode = openList[lowestIndex];
+                
+                // Move from open list by swapping with last element
+                openList[lowestIndex] = openList[openList.length - 1];
+                openList.pop();
+
+                const currentIdx = currentNode.y * CONFIG.MAP_WIDTH + currentNode.x;
+                if (closedMap[currentIdx]) continue;
+                closedMap[currentIdx] = 1;
+
+                // --- Found the path ---
+                if (currentNode.x === end.x && currentNode.y === end.y) {
+                    let path = [];
+                    let current = currentNode;
+                    while (current !== null) {
+                        path.push({x: current.x, y: current.y});
+                        current = current.parent;
+                    }
+                    return path.reverse(); // Return from start to end
+                }
+
+                // Get neighbors
+                const x = currentNode.x;
+                const y = currentNode.y;
+                const adjacentX = [x, x, x - 1, x + 1];
+                const adjacentY = [y - 1, y + 1, y, y];
+
+                for (let i = 0; i < 4; i++) {
+                    const nx = adjacentX[i];
+                    const ny = adjacentY[i];
+
+                    // Check if in bounds
+                    if (nx < 0 || nx >= CONFIG.MAP_WIDTH || ny < 0 || ny >= CONFIG.MAP_HEIGHT) continue;
+
+                    const nIdx = ny * CONFIG.MAP_WIDTH + nx;
+                    if (closedMap[nIdx]) continue;
+                    
+                    // Check if solid
+                    if (nx === end.x && ny === end.y) {
+                        // This is the destination, allow it even if solid
+                    } else if (isSolidFunc(nx, ny)) {
+                        // This is a different tile that is solid, skip it
+                        continue;
+                    }
+                    
+                    let neighborG = currentNode.g + 1;
+                    if (neighborG < bestGMap[nIdx]) {
+                        bestGMap[nIdx] = neighborG;
+                        let neighborNode = new Node(currentNode, nx, ny);
+                        neighborNode.g = neighborG;
+                        neighborNode.h = getDistance(nx, ny, end.x, end.y);
+                        neighborNode.f = neighborNode.g + neighborNode.h;
+                        openList.push(neighborNode);
+                    }
+                }
+            }
+
+            // No path found
+            return null;
+        }
+		
+		/**
+         * Finds a random, valid tile for a Shrieker to wander to.
+         */
+        function findRandomLandTile() {
+             for (let i = 0; i < 30; i++) { // Try 30 times
+                const x = Math.floor(Math.random() * CONFIG.MAP_WIDTH);
+                const y = Math.floor(Math.random() * CONFIG.MAP_HEIGHT);
+                
+                // Must be 'EMPTY' ground (not water, beach, or mountain)
+                if (GAME_STATE.map[y][x] === CONFIG.TILES.EMPTY) {
+                     // Must not be solid (e.g., a building is there)
+                     if (isTileSolidForShrieker(x,y)) {
+                        continue; 
+                     }
+
+                     // Must NOT be in tower range
+                     if (isTileInTowerRange(x, y)) {
+                         continue;
+                     }
+                     
+                     // Found a good spot!
+                     return { x, y };
+                }
+             }
+             return null; // Failed to find a spot
+        }
+		
+		/**
+         * Checks if an enemy's target is still valid.
+         */
+        function isTargetValid(target) {
+            if (!target) return false;
+
+            // Is it the player?
+            if (target === GAME_STATE.player) {
+                return target.hp > 0;
+            }
+            
+            // Is it a villager?
+            if (target.startPos) { // Villagers have a 'startPos'
+                // Must be alive AND not sheltered
+                return target.hp > 0 && 
+                       target.state !== 'sheltered' &&
+                       GAME_STATE.villagers.includes(target); // Still in the array?
+            }
+            
+            // Is it a structure?
+            if (target.maxHp) {
+                // Must still exist in the structures array
+                return GAME_STATE.structures.includes(target) ||
+                       GAME_STATE.constructionSites.includes(target);
+            }
+            
+            return false; // Unknown target type
+        }
+		
+		/**
+         * Gets a "name" for a target for logging.
+         */
+        function getTargetName(target) {
+            if (!target) return "null";
+            if (target === GAME_STATE.player) return "Player";
+            if (target.startPos) return `Villager ${target.id}`;
+            // Check for structure or construction site
+            if (target.maxHp) {
+                if (target.targetChar) return `Site (${target.targetChar} at ${target.x},${target.y})`;
+                if (target.char) return `Structure (${target.char} at ${target.x},${target.y})`;
+            }
+            return "Unknown Target";
+        }
+		
+		const ENEMY_AI_LOGGING_ENABLED = false;
+        function logAI(state, enemy, message) {
+            if (ENEMY_AI_LOGGING_ENABLED) {
+                Logger.debug('AI', `[ENEMY ${state}] ${enemy.id}: ${message}`);
+            }
+        }
+        
+        const VILLAGER_AI_LOGGING_ENABLED = false;
+        function logVillagerAI(state, villager, message) {
+            if (VILLAGER_AI_LOGGING_ENABLED) {
+                Logger.debug('AI', `[VILLAGER ${state}] ${villager.id}: ${message}`);
+            }
+        }
+		
+		/**
+         * Triggers a 'hallucination' by flashing an enemy on a random empty tile.
+         * NEW: Has a chance to spawn a REAL enemy.
+         */
+        function triggerHallucination() {
+            const p = GAME_STATE.player;
+            let validSpot = null; // Will store {x, y, tileSpan, originalChar, originalClass}
+
+            // Try 10 times to find a valid spot
+            for (let i = 0; i < 10; i++) {
+                // Find a random tile within 8 tiles of the player
+                const x = p.x + (Math.floor(Math.random() * 17) - 8);
+                const y = p.y + (Math.floor(Math.random() * 17) - 8);
+
+                // Check if it's a valid, empty, non-solid land tile
+                if (x < 0 || x >= CONFIG.MAP_WIDTH || y < 0 || y >= CONFIG.MAP_HEIGHT) continue;
+                
+                const tile = getTileAt(x, y);
+                if (tile === CONFIG.TILES.EMPTY || tile === CONFIG.TILES.BEACH) {
+                    const tileSpan = document.getElementById(`tile-${y}-${x}`);
+                    if (tileSpan) {
+                        validSpot = {
+                            x: x,
+                            y: y,
+                            tileSpan: tileSpan,
+                            originalChar: tileSpan.innerHTML,
+                            originalClass: tileSpan.className
+                        };
+                        break;
+                    }
+                }
+            }
+            
+            // If we found a valid spot, trigger the effect
+            if (validSpot) {
+                // 1. Flash the hallucination
+				
+				// Only play sound if it's REAL or very occasionally for fake ones
+                // Use a very quiet volume (0.05) instead of the standard playHit (0.1)
+                if (Math.random() < 0.3) SoundManager.playTone(100, 'square', 0.05, 0.05);
+				
+                validSpot.tileSpan.className = 'tile-enemy-l';
+                validSpot.tileSpan.innerHTML = 'l';
+                
+                // 2. THE JUMPSCARE: (THE FIX: 2% chance, was 10%)
+                let isReal = false;
+                if (GAME_STATE.tide.isHighTide && Math.random() < 0.02) { // 2% chance
+                    isReal = true;
+                    
+                    const type = CONFIG.ENEMY_TYPES['l'];
+                    const newLurker = {
+                        id: `e_hallucination_${validSpot.x}_${validSpot.y}`,
+                        x: validSpot.x,
+                        y: validSpot.y,
+                        type: 'l',
+                        char: type.char,
+                        hp: type.hp,
+                        nextMove: type.moveSpeed,
+                        state: ENEMY_STATES.IDLE, // Will immediately scan for the player
+                        target: null,
+                        path: null,
+                        aggroUntil: 0,
+                        stuckTimer: 0,
+                        siegeBlacklist: []
+                    };
+                    GAME_STATE.enemies.push(newLurker);
+                    
+                    logAI("IDLE", newLurker, "A waking nightmare coalesces...");
+                    logMessage("The vision... it's still there!", 'warning');
+                }
+                // --- END FIX ---
+
+                // 3. Set a timer to restore the tile
+                setTimeout(() => {
+                    // Only restore the tile if the hallucination wasn't real
+                    if (!isReal) {
+                        validSpot.tileSpan.className = validSpot.originalClass;
+                        validSpot.tileSpan.innerHTML = validSpot.originalChar;
+                    }
+                }, 150); // Flash for 150ms
+            }
+        }
+		
+		/**
+         * Triggers a full-screen "jumpscare" flash of ASCII art.
+         */
+        function triggerAsciiFlash() {
+            // Failsafe: Don't trigger a flash if one is already happening
+            if (GAME_STATE.isFlashing) return;
+			
+			SoundManager.playJumpscare();
+			
+			triggerShake('extreme', 300);
+			
+			triggerSidebarCorruption();
+            
+            GAME_STATE.isFlashing = true;
+            
+            let originalTiles = []; // To store the screen state
+            
+            // 1. Save the current screen and draw the horror image
+            for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
+                const artRow = HORROR_FLASH_ART[y];
+                for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
+                    const span = document.getElementById(`tile-${y}-${x}`);
+                    if (span) {
+                        // Save the original state
+                        originalTiles.push({
+                            span: span,
+                            char: span.innerHTML,
+                            className: span.className
+                        });
+                        
+                        // Draw the horror tile
+                        const artChar = artRow[x];
+                        span.className = 'tile-horror-flash';
+                        span.innerHTML = (artChar === ' ') ? '&nbsp;' : artChar;
+                    }
+                }
+            }
+            
+            // 2. Set timer to restore the screen
+            setTimeout(() => {
+                for (const tile of originalTiles) {
+                    tile.span.className = tile.className;
+                    tile.span.innerHTML = tile.char;
+                }
+                
+                // We MUST set needsRender to true to fix the renderBuffer,
+                // which is now out of sync with what's on screen.
+                GAME_STATE.needsRender = true; 
+                GAME_STATE.isFlashing = false;
+            }, 150); // Flash for only 150ms
+        }
+		
+		/**
+         * Corrupts the left/right sidebars with scary text for a few seconds.
+         */
+        function triggerSidebarCorruption() {
+            if (GAME_STATE.areSidebarsCorrupted) return;
+            GAME_STATE.areSidebarsCorrupted = true;
+
+            const leftPanel = document.getElementById('controls-panel');
+            const rightPanel = document.getElementById('sidebar-panel');
+            
+            // 1. Save original HTML state
+            const leftOriginal = leftPanel.innerHTML;
+            const rightOriginal = rightPanel.innerHTML;
+            
+            // 2. Helper to generate scary HTML
+            const getScaryContent = () => {
+                let html = '<div class="corrupted-text">';
+                for(let i=0; i<8; i++) {
+                    const msg = CORRUPTED_MESSAGES[Math.floor(Math.random() * CORRUPTED_MESSAGES.length)];
+                    html += `<div>${msg}</div>`;
+                }
+                html += '</div>';
+                return html;
+            };
+            
+            // 3. Overwrite panels
+            leftPanel.innerHTML = getScaryContent();
+            rightPanel.innerHTML = getScaryContent();
+            
+            // 4. Restore after 1 second
+            setTimeout(() => {
+                leftPanel.innerHTML = leftOriginal;
+                rightPanel.innerHTML = rightOriginal;
+                GAME_STATE.areSidebarsCorrupted = false;
+                
+                // Force a UI refresh to ensure dynamic values (HP, Dread) are current
+                updateUI(); 
+            }, 1000);
+        }
+		
+		// Simple hash function for generating jitter
+        String.prototype.hashCode = function() {
+            var hash = 0, i, chr;
+            if (this.length === 0) return hash;
+            for (i = 0; i < this.length; i++) {
+                chr   = this.charCodeAt(i);
+                hash  = ((hash << 5) - hash) + chr;
+                hash |= 0; // Convert to 32bit integer
+            }
+            return Math.abs(hash);
+        };
+
+
+        /**
+         * NEW: Spawns enemies based on wave number.
+         */
+        function spawnEnemies() {
+            if (GAME_STATE.isGameOver) return;
+            
+            let spawnCount = 0;
+            let enemyTypes = [];
+            const cycle = GAME_STATE.tide.cycle;
+            
+            // Define wave composition
+            if (cycle === 1) {
+                spawnCount = 1;
+                enemyTypes = ['e'];
+            } else if (cycle === 2) {
+                spawnCount = 2;
+                enemyTypes = ['e', 'l'];
+            } else if (cycle === 3) { // NEW: Introduce Shrieker
+                spawnCount = 2;
+                enemyTypes = ['e', 'l', 'k'];
+            } else if (cycle === 4) { // NEW: Cycle 4 has Devil Dogs
+                spawnCount = cycle; 
+                enemyTypes = ['e', 'l', 'B', 'k', 'd'];
+            } else { // NEW: Cycle 5+ adds Extruders
+                spawnCount = cycle; // Scale up
+                enemyTypes = ['e', 'l', 'B', 'k', 'd', 'X']; // Added Extruder
+            }
+            
+            logMessage(`A new wave appears! (${spawnCount} enemies)`, 'warning');
+			
+            for (let i = 0; i < spawnCount; i++) {
+                const spawnX = Math.floor(Math.random() * CONFIG.MAP_WIDTH);
+                const spawnY = 0; // Top row is water
+                
+                // Ensure spawn tile is valid (water)
+                if (spawnY < CONFIG.MAP_HEIGHT && spawnX < CONFIG.MAP_WIDTH &&
+                    isTileSolidForEnemy(spawnX, spawnY) === false) { // Check if spawn is not blocked
+                    
+                    const typeKey = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+                    const type = CONFIG.ENEMY_TYPES[typeKey];
+					const initialState = (typeKey === 'k') ? ENEMY_STATES.WANDERING : ENEMY_STATES.IDLE;
+                    
+                    GAME_STATE.enemies.push({
+                        id: `${typeKey}_${spawnX}_${spawnY}_${i}`, // FIX: Use the actual typeKey
+                        x: spawnX,
+                        y: spawnY,
+                        type: typeKey,
+                        char: type.char,
+                        hp: type.hp,
+                        nextMove: type.moveSpeed + (i * 100), // Stagger spawns
+                        
+                        // --- FSM Properties ---
+                        state: initialState, 		// Use our new initial state
+                        target: null,               // The ultimate goal (player, hall, etc.)
+                        siegeTarget: null,          // The immediate obstacle (a wall)
+                        path: null,
+                        aggroUntil: 0,              // For player-aggro leash
+						stuckTimer: 0,               // Failsafe for pathing loops
+						siegeBlacklist: [],          // Coords of impossible-to-reach walls
+						wanderGoal: null 			// NEW: For wandering logic
+                    });
+                }
+            }
+			GAME_STATE.needsRender = true;
+        }
+		
+		/**
+		 * NEW: Spawns enemies for the tutorial in a controlled manner.
+		 * @param {string} typeKey - The enemy type ('l' or 'B').
+		 * @param {number} count - Number of enemies to spawn.
+		 */
+		function spawnTutorialEnemy(typeKey, count) {
+			if (GAME_STATE.isGameOver) return;
+			
+			// Spawn enemies near the center beach (safer area for tutorial)
+			const spawnRowY = 3; 
+
+			for (let i = 0; i < count; i++) {
+				const spawnX = 18 + (i * 2); // Spread them out horizontally
+				const type = CONFIG.ENEMY_TYPES[typeKey];
+				
+				GAME_STATE.enemies.push({
+					id: `${typeKey}_tutorial_${i}`,
+					x: spawnX,
+					y: spawnRowY,
+					type: typeKey,
+					char: type.char,
+					hp: type.hp,
+					nextMove: 1000 + (i * 100), // Stagger spawn slightly
+					state: ENEMY_STATES.IDLE, 		
+					target: null,               
+					path: null,
+					aggroUntil: 0,
+					stuckTimer: 0,
+					siegeBlacklist: [],
+					wanderGoal: null 			
+				});
+			}
+			GAME_STATE.needsRender = true;
+			logMessage(`A lone creature emerges from the water!`, 'warning', 3000);
+		}
+        
+        /**
+         * Removes all enemies from the game.
+         */
+        function clearEnemies() {
+            GAME_STATE.enemies = [];
+        }
+		
+		/**
+         * Starts "The Moon Opens its Eye" event.
+         */
+        function triggerMoonEvent() {
+            if (GAME_STATE.isMoonEventActive) return; // Already active
+
+            GAME_STATE.isMoonEventActive = true;
+			
+			SoundManager.startMoonDrone();
+            
+            // Random duration from 10s (10000) to 30s (10000 + 20000)
+            const duration = 10000 + (Math.random() * 20000);
+            GAME_STATE.moonEventTimer = duration;
+            
+            // Announce the event
+            showMessage("THE MOON OPENS", "An unblinking eye stares from the void.", 4000, true);
+            
+            // Apply the visual effect
+            document.getElementById('game-container').classList.add('moon-event-active');
+        }
+        
+        /**
+         * Ends "The Moon Opens its Eye" event.
+         */
+        function endMoonEvent() {
+            if (!GAME_STATE.isMoonEventActive) return;
+            
+            GAME_STATE.isMoonEventActive = false;
+			
+			SoundManager.stopMoonDrone();
+			
+            GAME_STATE.moonEventTimer = 0;
+            
+            // Announce the end
+            logMessage("The unblinking eye has closed.", 'info');
+            
+            // Remove the visual effect
+            document.getElementById('game-container').classList.remove('moon-event-active');
+        }
+
+        /**
+         * Destroys a structure, removing it from the game.
+         */
+        function destroyStructure(structure) {
+			triggerParticleBurst(structure.x, structure.y, '!', 'death', 15);
+			// --- NEW: Shrine Destruction ---
+            if (structure.char === CONFIG.TILES.SHRINE) {
+                logMessage("The Shrine has been desecrated! It cannot be rebuilt.", 'warning', 5000);
+                triggerShake('extreme', 500);
+                // We leave hasShrineBeenBuilt = true, so the 'K' key
+                // will not work, effectively making it a one-time item.
+            }
+            // --- END NEW ---
+            // Check for Hall destruction
+            if (structure.char === CONFIG.TILES.HOUSE) {
+                GAME_STATE.isGameOver = true;
+                showMessage("THE HALL IS DESTROYED", "The village has fallen.", "Press [R] to Restart.", 0, false);
+            }
+            
+            GAME_STATE.structures = GAME_STATE.structures.filter(s => s.id !== structure.id);
 
 			// 2. Get the available space in the parent (#game-container)
 			const availW = gameContainer.clientWidth - 30; // Subtract padding/margins (approx 30px)
