@@ -5,6 +5,9 @@
   "name": "waves-game",
   "version": "1.0.0",
   "description": "Atmospheric survival RTS with a horror twist",
+  "dependencies": {
+    "jsdom": "^29.0.1"
+  },
   "scripts": {
     "test": "node tests/getDistance.test.js"
   }
