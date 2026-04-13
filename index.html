@@ -6003,12 +6003,20 @@ const TUTORIAL_STEP_HANDLERS = [
             }
 
             // 6. Compare renderGrid to renderBuffer and update only changed tiles
+            const structureMap = new Array(CONFIG.MAP_HEIGHT * CONFIG.MAP_WIDTH);
+            for (let i = 0; i < GAME_STATE.structures.length; i++) {
+                const s = GAME_STATE.structures[i];
+                if (s.y >= 0 && s.y < CONFIG.MAP_HEIGHT && s.x >= 0 && s.x < CONFIG.MAP_WIDTH) {
+                    structureMap[s.y * CONFIG.MAP_WIDTH + s.x] = s;
+                }
+            }
+
             for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
 				for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
 					const newChar = renderGrid[y][x];
 
 					// Find structure and reinforcement status
-					const struct = GAME_STATE.structures.find(s => s.x === x && s.y === y);
+					const struct = structureMap[y * CONFIG.MAP_WIDTH + x];
 					const isReinforced = struct ? struct.isReinforced : false;
 
 					// --- FIX: Create a unique key that includes reinforcement status ---
@@ -11512,12 +11520,20 @@ const TUTORIAL_STEP_HANDLERS = [
             }
 
             // 6. Compare renderGrid to renderBuffer and update only changed tiles
+            const structureMap = new Array(CONFIG.MAP_HEIGHT * CONFIG.MAP_WIDTH);
+            for (let i = 0; i < GAME_STATE.structures.length; i++) {
+                const s = GAME_STATE.structures[i];
+                if (s.y >= 0 && s.y < CONFIG.MAP_HEIGHT && s.x >= 0 && s.x < CONFIG.MAP_WIDTH) {
+                    structureMap[s.y * CONFIG.MAP_WIDTH + s.x] = s;
+                }
+            }
+
             for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
 				for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
 					const newChar = renderGrid[y][x];
 
 					// Find structure and reinforcement status
-					const struct = GAME_STATE.structures.find(s => s.x === x && s.y === y);
+					const struct = structureMap[y * CONFIG.MAP_WIDTH + x];
 					const isReinforced = struct ? struct.isReinforced : false;
 
 					// --- FIX: Create a unique key that includes reinforcement status ---
@@ -12737,12 +12753,20 @@ const TUTORIAL_STEP_HANDLERS = [
             }
 
             // 6. Compare renderGrid to renderBuffer and update only changed tiles
+            const structureMap = new Array(CONFIG.MAP_HEIGHT * CONFIG.MAP_WIDTH);
+            for (let i = 0; i < GAME_STATE.structures.length; i++) {
+                const s = GAME_STATE.structures[i];
+                if (s.y >= 0 && s.y < CONFIG.MAP_HEIGHT && s.x >= 0 && s.x < CONFIG.MAP_WIDTH) {
+                    structureMap[s.y * CONFIG.MAP_WIDTH + s.x] = s;
+                }
+            }
+
             for (let y = 0; y < CONFIG.MAP_HEIGHT; y++) {
 				for (let x = 0; x < CONFIG.MAP_WIDTH; x++) {
 					const newChar = renderGrid[y][x];
 
 					// Find structure and reinforcement status
-					const struct = GAME_STATE.structures.find(s => s.x === x && s.y === y);
+					const struct = structureMap[y * CONFIG.MAP_WIDTH + x];
 					const isReinforced = struct ? struct.isReinforced : false;
 
 					// --- FIX: Create a unique key that includes reinforcement status ---
