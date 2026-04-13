@@ -3647,94 +3647,89 @@ const TUTORIAL_STEP_HANDLERS = [
             // --- END FIX ---
             
             // Helper function for A* node
-            function Node(parent, pos) {
+            function Node(parent, x, y) {
                 this.parent = parent;
-                this.pos = pos;
+                this.x = x;
+                this.y = y;
                 
                 this.g = 0; // Distance from start
                 this.h = 0; // Heuristic distance to end
                 this.f = 0; // f = g + h
             }
 
+            const mapSize = CONFIG.MAP_WIDTH * CONFIG.MAP_HEIGHT;
             let openList = [];
-            let closedList = [];
+            let closedMap = new Uint8Array(mapSize);
+            let bestGMap = new Float64Array(mapSize);
+            bestGMap.fill(Infinity);
 
-            let startNode = new Node(null, start);
-            let endNode = new Node(null, end);
-
+            let startNode = new Node(null, start.x, start.y);
+            bestGMap[start.y * CONFIG.MAP_WIDTH + start.x] = 0;
             openList.push(startNode);
 
             while (openList.length > 0) {
                 
                 // Find node with lowest 'f'
                 let lowestIndex = 0;
-                for (let i = 0; i < openList.length; i++) {
+                for (let i = 1; i < openList.length; i++) {
                     if (openList[i].f < openList[lowestIndex].f) {
                         lowestIndex = i;
                     }
                 }
                 let currentNode = openList[lowestIndex];
                 
-                // Move from open to closed list
-                openList.splice(lowestIndex, 1);
-                closedList.push(currentNode);
+                // Move from open list by swapping with last element
+                openList[lowestIndex] = openList[openList.length - 1];
+                openList.pop();
+
+                const currentIdx = currentNode.y * CONFIG.MAP_WIDTH + currentNode.x;
+                if (closedMap[currentIdx]) continue;
+                closedMap[currentIdx] = 1;
 
                 // --- Found the path ---
-                if (currentNode.pos.x === endNode.pos.x && currentNode.pos.y === endNode.pos.y) {
+                if (currentNode.x === end.x && currentNode.y === end.y) {
                     let path = [];
                     let current = currentNode;
                     while (current !== null) {
-                        path.push(current.pos);
+                        path.push({x: current.x, y: current.y});
                         current = current.parent;
                     }
                     return path.reverse(); // Return from start to end
                 }
 
                 // Get neighbors
-                let neighbors = [];
-                const { x, y } = currentNode.pos;
-                const adjacent = [
-                    {x: x, y: y - 1}, {x: x, y: y + 1},
-                    {x: x - 1, y: y}, {x: x + 1, y: y}
-                ];
+                const x = currentNode.x;
+                const y = currentNode.y;
+                const adjacentX = [x, x, x - 1, x + 1];
+                const adjacentY = [y - 1, y + 1, y, y];
 
-                for (const pos of adjacent) {
+                for (let i = 0; i < 4; i++) {
+                    const nx = adjacentX[i];
+                    const ny = adjacentY[i];
+
                     // Check if in bounds
-                    if (pos.x < 0 || pos.x >= CONFIG.MAP_WIDTH || pos.y < 0 || pos.y >= CONFIG.MAP_HEIGHT) {
-                        continue;
-                    }
+                    if (nx < 0 || nx >= CONFIG.MAP_WIDTH || ny < 0 || ny >= CONFIG.MAP_HEIGHT) continue;
+
+                    const nIdx = ny * CONFIG.MAP_WIDTH + nx;
+                    if (closedMap[nIdx]) continue;
                     
                     // Check if solid
-                    if (pos.x === endNode.pos.x && pos.y === endNode.pos.y) {
+                    if (nx === end.x && ny === end.y) {
                         // This is the destination, allow it even if solid
-                    } else if (isSolidFunc(pos.x, pos.y)) {
+                    } else if (isSolidFunc(nx, ny)) {
                         // This is a different tile that is solid, skip it
                         continue;
                     }
                     
-                    
-                    neighbors.push(new Node(currentNode, pos));
-                }
-
-                // Process neighbors
-                for (const neighbor of neighbors) {
-                    // Check if in closed list
-                    if (closedList.find(node => node.pos.x === neighbor.pos.x && node.pos.y === neighbor.pos.y)) {
-                        continue;
+                    let neighborG = currentNode.g + 1;
+                    if (neighborG < bestGMap[nIdx]) {
+                        bestGMap[nIdx] = neighborG;
+                        let neighborNode = new Node(currentNode, nx, ny);
+                        neighborNode.g = neighborG;
+                        neighborNode.h = getDistance(nx, ny, end.x, end.y);
+                        neighborNode.f = neighborNode.g + neighborNode.h;
+                        openList.push(neighborNode);
                     }
-
-                    // Calculate G, H, F
-                    neighbor.g = currentNode.g + 1;
-                    neighbor.h = getDistance(neighbor.pos.x, neighbor.pos.y, endNode.pos.x, endNode.pos.y);
-                    neighbor.f = neighbor.g + neighbor.h;
-
-                    // Check if in open list
-                    let inOpenList = openList.find(node => node.pos.x === neighbor.pos.x && node.pos.y === neighbor.pos.y);
-                    if (inOpenList && neighbor.g >= inOpenList.g) {
-                        continue;
-                    }
-
-                    openList.push(neighbor);
                 }
             }
 
