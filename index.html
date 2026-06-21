@@ -2132,6 +2132,8 @@
             isInitialized: false,
             needsRender: true,
             isGameOver: false,
+            isVictory: false, // NEW: Victory state
+            stats: { enemiesKilled: 0 }, // NEW: Track kills
             nextVillagerId: 1, // NEW: To uniquely identify villagers
 			dread: 0,
 			isAlarmActive: false,
@@ -3002,6 +3004,8 @@
 			GAME_STATE.nextVillagerId = 1;
 			
 			GAME_STATE.isGameOver = false; // Clear the flag
+			GAME_STATE.isVictory = false; 
+			GAME_STATE.stats = { enemiesKilled: 0 }; 
 			GAME_STATE.phase = 'PLAYING';  // Set phase
 			GAME_STATE.isBuildMode = false; // Start in build mode
 			GAME_STATE.selectedStructure = CONFIG.TILES.TOWER; // Pre-select Tower
@@ -4101,7 +4105,7 @@
          * NEW: Central function to apply damage to the player
          */
         function damagePlayer(amount, message) {
-            if (GAME_STATE.isGameOver) return;
+            if (GAME_STATE.isGameOver || GAME_STATE.isVictory) return;
 			
 			// --- NEW: Drop Idol on Hit ---
             if (GAME_STATE.player.isCarryingIdol) {
@@ -4134,6 +4138,20 @@
                 showMessage("YOU ARE LOST", "Press [R] to Restart.", 0, false);
             }
             GAME_STATE.needsRender = true;
+        }
+        function triggerVictory() {
+            GAME_STATE.isVictory = true;
+            SoundManager.playTide(false); // Make sure high tide sound stops
+            
+            // Trigger cinematic dialogue, using SURVIVOR since Elder is dead
+            showCinematicDialogue("SURVIVOR", "The sea recedes...\nThe sun rises on the 7th dawn.\nWe have survived.", 8000, showVictoryScreen);
+        }
+
+        function showVictoryScreen() {
+            const aliveVillagers = GAME_STATE.villagers.filter(v => v.hp > 0).length;
+            const kills = GAME_STATE.stats.enemiesKilled;
+            const subtitle = `Villagers Alive: ${aliveVillagers} | Enemies Defeated: ${kills}\n\nPress [R] to Restart.`;
+            showMessage("THE 7TH DAWN", subtitle, 0, true, true); // true for pulse, true for isWin
         }
 
         /**
@@ -4647,7 +4665,7 @@
          * NEW: Spawns enemies based on wave number.
          */
         function spawnEnemies() {
-            if (GAME_STATE.isGameOver) return;
+            if (GAME_STATE.isGameOver || GAME_STATE.isVictory) return;
             
             let spawnCount = 0;
             let enemyTypes = [];
@@ -4715,7 +4733,7 @@
 		 * @param {number} count - Number of enemies to spawn.
 		 */
 		function spawnTutorialEnemy(typeKey, count) {
-			if (GAME_STATE.isGameOver) return;
+			if (GAME_STATE.isGameOver || GAME_STATE.isVictory) return;
 			
 			// Spawn enemies near the center beach (safer area for tutorial)
 			const spawnRowY = 3; 
@@ -4882,6 +4900,7 @@
                 
                 if (target.hp <= 0) {
                     logMessage(`The ${target.type} dissolves!`, 'info', 2000);
+                    GAME_STATE.stats.enemiesKilled++; // NEW: Track kills
                     GAME_STATE.enemies = GAME_STATE.enemies.filter(e => e !== target);
 					triggerParticleBurst(target.x, target.y, '!', 'death', 8);
                 }
@@ -4997,6 +5016,7 @@
 				// 4. Check for Death (Reuse existing logic structure)
 				if (closestEnemy.hp <= 0) {
 					logMessage(`The ${closestEnemy.type} dissolves! (Ranged kill)`, 'info', 2000);
+					GAME_STATE.stats.enemiesKilled++; // NEW: Track kills
 					GAME_STATE.enemies = GAME_STATE.enemies.filter(e => e !== closestEnemy);
 					triggerParticleBurst(closestEnemy.x, closestEnemy.y, '!', 'death', 8);
 				}
@@ -5560,6 +5580,7 @@
                         
                         if (enemy.hp <= 0) {
                             logMessage(`The enemy dissolves!`, 'info', 2000);
+                            GAME_STATE.stats.enemiesKilled++; // NEW: Track kills
                             GAME_STATE.enemies = GAME_STATE.enemies.filter(e => e !== enemy);
                             return; 
                         }
@@ -5860,6 +5881,7 @@
                     
                     if (enemy.hp <= 0) {
                         logMessage(`The enemy dissolves!`, 'info', 2000);
+                        GAME_STATE.stats.enemiesKilled++;
                         GAME_STATE.enemies = GAME_STATE.enemies.filter(e => e !== enemy);
                         return; 
                     }
@@ -7772,6 +7794,12 @@
                     
                 } else {
                     // --- START OF LOW TIDE ---
+                    // --- NEW: VICTORY CHECK ---
+                    if (GAME_STATE.tide.cycle === 7) {
+                        triggerVictory();
+                        return; // Halt further tide logic
+                    }
+
 					// --- NEW: Unlock Gathering Hut (Cycle 1 Low Tide = 2nd Low Tide) ---
                     if (GAME_STATE.tide.cycle >= 1 && !GAME_STATE.hasGatheringHutUnlocked) {
                         GAME_STATE.hasGatheringHutUnlocked = true;
@@ -7994,7 +8022,7 @@
          * Main game logic update function.
          */
         function update(deltaTime) {
-            if (GAME_STATE.isGameOver) return;
+            if (GAME_STATE.isGameOver || GAME_STATE.isVictory) return;
             
             updateTargetHighlights();
             
@@ -8891,7 +8919,7 @@
 			
             SoundManager.init();
 			
-			if (GAME_STATE.isGameOver) return; // No input if game is over
+			if (GAME_STATE.isGameOver || GAME_STATE.isVictory) return; // No input if game is over or won
 
             const buildMenu = document.getElementById('build-menu');
             const statusPanel = document.getElementById('status-panel'); // Get new panel
@@ -9120,14 +9148,14 @@
 			requestAnimationFrame(gameLoop);
 
 			// Only update logic if we are actively running (PLAYING or TUTORIAL)
-			if ((GAME_STATE.phase === 'PLAYING' || GAME_STATE.phase === 'TUTORIAL') && !GAME_STATE.isGameOver) {
+			if ((GAME_STATE.phase === 'PLAYING' || GAME_STATE.phase === 'TUTORIAL') && !GAME_STATE.isGameOver && !GAME_STATE.isVictory) {
 				const deltaTime = timestamp - GAME_STATE.lastTick;
 				if (deltaTime >= CONFIG.GAME_TICK_MS) {
 					GAME_STATE.lastTick = timestamp - (deltaTime % CONFIG.GAME_TICK_MS);
 					update(CONFIG.GAME_TICK_MS); 
 					updateUI();
 				}
-			} else if (GAME_STATE.isGameOver && GAME_STATE.phase !== 'GAMEOVER') {
+			} else if ((GAME_STATE.isGameOver || GAME_STATE.isVictory) && GAME_STATE.phase !== 'GAMEOVER') {
 				// Transition to Game Over phase just once
 				GAME_STATE.phase = 'GAMEOVER';
 			}
@@ -9259,7 +9287,7 @@
             let lastStep = -1;
             
             const testInterval = setInterval(() => {
-                if (GAME_STATE.isGameOver) {
+                if (GAME_STATE.isGameOver || GAME_STATE.isVictory) {
                     clearInterval(testInterval);
                     setTestStatus("Test Aborted: Game Over triggered!", true);
                     return;
