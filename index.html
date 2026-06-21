@@ -9616,6 +9616,32 @@
 			setTimeout(handleResize, 100);
 			setTimeout(handleResize, 500);
 
+            // Expose state and debug helpers to window for console manual testing
+            window.GAME_STATE = GAME_STATE;
+            window.CONFIG = CONFIG;
+            window.ENEMY_STATES = ENEMY_STATES;
+            window.clearEnemies = clearEnemies;
+            
+            // NEW: Helper for testing the 7th Dawn victory sequence
+            window.triggerDawnTest = function() {
+                console.log("[TEST] Fast-forwarding to the end of Cycle 7...");
+                
+                // End tutorial if active
+                if (GAME_STATE.phase === 'TUTORIAL') {
+                    GAME_STATE.phase = 'PLAYING';
+                    GAME_STATE.tutorial.step = 999;
+                    document.getElementById('tutorial-overlay').style.display = 'none';
+                }
+                
+                // Setup the tide state
+                GAME_STATE.tide.cycle = 7;
+                GAME_STATE.tide.isHighTide = true;
+                GAME_STATE.tide.timer = 3000; // 3 seconds until Low Tide triggers the win
+                GAME_STATE.needsRender = true;
+                
+                return "Wait 3 seconds for the victory sequence to begin!";
+            };
+
             /*
             // Auto-trigger test suite if ?test=true
             const urlParams = new URLSearchParams(window.location.search);
@@ -9644,11 +9670,7 @@
                 }, 1000);
             }
 
-            // Expose state and debug helpers to window for console manual testing
-            window.GAME_STATE = GAME_STATE;
-            window.CONFIG = CONFIG;
-            window.ENEMY_STATES = ENEMY_STATES;
-            window.clearEnemies = clearEnemies;
+
             window.spawnEnemy = function(typeKey, x, y) {
                 if (!CONFIG.ENEMY_TYPES[typeKey]) {
                     console.error(`Invalid enemy type: ${typeKey}. Choose from: ${Object.keys(CONFIG.ENEMY_TYPES).join(', ')}`);
