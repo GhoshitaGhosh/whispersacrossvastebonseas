@@ -24,6 +24,7 @@ Guided by the village Elder, you will manage your workforce and fortify your pos
 - **Strategic Command:** Direct your villagers to gather wood and stone, build protective walls, or man the watchtowers.
 - **The Dread System:** Fear is a tangible mechanic. As situations worsen, your screen distorts with hallucinations, and villagers may panic. Keep the Dread low to survive!
 - **7 Cycles of Survival:** Defend your Great Hall against escalating waves of enemies, ranging from swarming *Lurkers* to towering *Brutes* and deadly *Extruders*.
+- **The Mountain Rats:** Hoarding too much food will attract hungry rat swarms from the mountains during the day, threatening your hard-earned stockpiles.
 - **Narrative Prologue:** Play through "Cycle 0," a narrative-driven beginning that introduces you to the struggle against the void.
 - **Single-File Portability:** The entire game runs locally in your browser from a single `index.html` file!
 
@@ -42,10 +43,13 @@ Playing W.A.V.E.S. is simple—no installation or server required!
 | Key | Action |
 | --- | --- |
 | **W, A, S, D** | Move your character |
-| **E** | Interact / Reinforce walls (Hold) |
+| **Q** | Ranged Attack |
+| **E** | Interact / Reinforce walls & towers (Hold) |
 | **F** | Order villagers to follow you |
 | **G** | Assign following villagers to a task (Gather / Build / Man Tower) |
-| **B** | Open the Build Menu |
+| **H** | Halt All (Stop Tasks) |
+| **B** | Toggle Build Mode |
+| **1-8** | Select Structure (while in Build Mode) |
 | **R** | Rally panicked villagers or un-man a tower |
 
 ---
