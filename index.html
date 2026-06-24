@@ -1224,7 +1224,7 @@
             <div class="sidebar-module visible" style="margin-top: 20px;">
                 <h3>Guide</h3>
                 <div class="guide-text">
-                    <p><strong>Low Tide:</strong> Gather resources, build defenses, and manage villagers.</p>
+                    <p><strong>Low Tide:</strong> Gather resources, build defenses, and manage villagers. Don't hoard too much food, or you'll attract Rats.</p>
                     <p><strong>High Tide:</strong> Defend the Great Hall from the waves.</p>
                     <p><strong>Reinforce:</strong> Stand near a wall/tower and hold [E] to buff it (Costs 2 Wood).</p>
                     <p><strong>Dread:</strong> Keep it low, or face the consequences.</p>
@@ -1388,7 +1388,8 @@
 			FLOTSAM: '?', // NEW
             IDOL: 'i', // NEW
 			ENEMY_DEVIL_DOG: 'd', // NEW
-			ENEMY_EXTRUDER: 'X'
+			ENEMY_EXTRUDER: 'X',
+			ENEMY_RAT: 'r'
         };
 		
         // --- AUDIO SYSTEM ---
@@ -1835,6 +1836,9 @@
             SHRINE_DREAD_CLEANSE: 10, // NEW
 			
 			DREAD_PER_UNSHELTERED_VILLAGER: 0.3, // Dread per sec, per villager, during Moon Event
+			
+			// NEW: Rat Mechanics
+			RAT_FOOD_DESTROYED: 2,
 
             // NEW: Tower Stats
             TOWER_ATTACK_RADIUS: 7,
@@ -1887,7 +1891,14 @@
                     moveSpeed: 600, // Average speed
                     attackSpeed: 4000, // Slow attack
                     attackRange: 8 // CONFIG.TOWER_ATTACK_RADIUS + 1
-                }
+                },
+				'r': { // Rat (NEW)
+					char: 'r',
+					hp: 1,
+					damage: 1,
+					moveSpeed: 200,
+					attackSpeed: 500
+				}
             },
 
             // Build Costs
@@ -2842,7 +2853,7 @@
         /**
          * Checks if a tile is solid (impassable) for an ENEMY.
          */
-        function isTileSolidForEnemy(x, y) {
+        function isTileSolidForEnemy(x, y, enemyType) {
             const tile = getTileAt(x, y);
             let solid = false;
             switch (tile) {
@@ -2854,7 +2865,6 @@
                 case CONFIG.TILES.PALISADE:
 				case CONFIG.TILES.PALISADE_H:
                 case CONFIG.TILES.WALL: // '#' Stone Wall
-				case CONFIG.TILES.DOOR:
 				case CONFIG.TILES.FARM:
 				case CONFIG.TILES.CONSTRUCTION:
 				case CONFIG.TILES.INFIRMARY:
@@ -2868,12 +2878,28 @@
                 case CONFIG.TILES.UNKNOWN: 
                     solid = true;
                     break;
+				case CONFIG.TILES.DOOR:
+					if (enemyType === 'r') {
+						solid = false; // Rats can cross doors
+					} else {
+						solid = true;
+					}
+					break;
                 default:
                     solid = false; 
                     break;
             }
             return solid;
         }
+
+		/**
+		 * Checks if a tile is solid for a Rat (can walk through doors).
+		 */
+		function isTileSolidForRat(x, y) {
+			const tile = getTileAt(x, y);
+			if (tile === CONFIG.TILES.DOOR) return false;
+			return isTileSolidForEnemy(x, y, 'r');
+		}
 		
 		/**
          * Checks if a given (x, y) coord is inside any manned tower's attack radius.
@@ -4287,6 +4313,8 @@
                 isSolidFunc = isTileSolidForEnemy;
             } else if (pathingType === 'shrieker') {
                 isSolidFunc = isTileSolidForShrieker;
+			} else if (pathingType === 'rat') {
+				isSolidFunc = isTileSolidForRat;
             } else {
                 isSolidFunc = isTileSolidForVillager;
             }
@@ -4726,6 +4754,48 @@
             }
 			GAME_STATE.needsRender = true;
         }
+
+		/**
+		 * NEW: Spawns Rats during Low Tide.
+		 */
+		function spawnRats() {
+            if (GAME_STATE.isGameOver || GAME_STATE.isVictory) return;
+            
+            const spawnCount = Math.floor(Math.random() * 4) + 7; // 7 to 10 rats
+			logMessage(`A swarm of ${spawnCount} rats approaches the Great Hall!`, 'warning');
+			
+			const type = CONFIG.ENEMY_TYPES['r'];
+            for (let i = 0; i < spawnCount; i++) {
+                let spawnX = Math.floor(Math.random() * CONFIG.MAP_WIDTH);
+                // Spawn just above the mountains (which occupy the bottom 4 rows)
+				const spawnY = CONFIG.MAP_HEIGHT - 5; 
+				
+				// Make sure we don't spawn inside a forest or wall
+				while (isTileSolidForRat(spawnX, spawnY)) {
+					spawnX = Math.floor(Math.random() * CONFIG.MAP_WIDTH);
+				}
+                
+                GAME_STATE.enemies.push({
+                    id: `r_${spawnX}_${spawnY}_${Date.now()}_${i}`,
+                    x: spawnX,
+                    y: spawnY,
+                    type: 'r',
+                    char: type.char,
+                    hp: type.hp,
+                    nextMove: type.moveSpeed + (i * 50),
+                    
+                    state: ENEMY_STATES.IDLE, 
+                    target: null,               
+                    siegeTarget: null,          
+                    path: null,
+                    aggroUntil: 0,              
+					stuckTimer: 0,               
+					siegeBlacklist: [],          
+					wanderGoal: null 			
+                });
+            }
+			GAME_STATE.needsRender = true;
+		}
 		
 		/**
 		 * NEW: Spawns enemies for the tutorial in a controlled manner.
@@ -5269,6 +5339,9 @@
                 if (!enemy.target) {
                     enemy.target = GAME_STATE.structures.find(s => s.char === CONFIG.TILES.HOUSE);
                 }
+            } else if (enemy.type === 'r') {
+                // Rats only target the Great Hall, ignoring everything else
+                enemy.target = GAME_STATE.structures.find(s => s.char === CONFIG.TILES.HOUSE);
             } else {
             // --- END NEW ---
             
@@ -5318,7 +5391,7 @@
                 // Check for other enemies
                 const tile = getTileAt(nextStep.x, nextStep.y);
                 if (tile === CONFIG.TILES.ENEMY || tile === CONFIG.TILES.ENEMY_LURKER || 
-                    tile === CONFIG.TILES.ENEMY_BRUTE || tile === CONFIG.TILES.ENEMY_SHRIEKER || tile === CONFIG.TILES.ENEMY_DEVIL_DOG || tile === CONFIG.TILES.ENEMY_EXTRUDER) {
+                    tile === CONFIG.TILES.ENEMY_BRUTE || tile === CONFIG.TILES.ENEMY_SHRIEKER || tile === CONFIG.TILES.ENEMY_DEVIL_DOG || tile === CONFIG.TILES.ENEMY_EXTRUDER || tile === CONFIG.TILES.ENEMY_RAT) {
                     logAI("WANDER", enemy, "Path blocked by another enemy. Re-pathing.");
                     enemy.path = null; // Clear path
                     enemy.nextMove = type.moveSpeed; // Wait and try again
@@ -5482,8 +5555,26 @@
                 enemy.nextMove = 1000; 
                 return;
             } 
+			
+			if (enemy.type === 'r' && dist <= 1 && enemy.target.char === CONFIG.TILES.HOUSE) {
+				// Rat reached Great Hall! Eat food and despawn.
+				const foodLost = Math.min(GAME_STATE.inventory.food, CONFIG.RAT_FOOD_DESTROYED);
+				if (foodLost > 0) {
+					GAME_STATE.inventory.food -= foodLost;
+					logMessage(`A rat sneaked into the Great Hall and ate ${foodLost} food!`, 'warning', 3000);
+					triggerShake('damage', 500);
+				}
+				
+				// Silently kill the rat by setting its HP to 0. 
+				// We won't trigger standard death logic (like drops or dread) in damageEnemy.
+				// But actually, damageEnemy calls die(). If we don't want die() to trigger, we can just remove it directly.
+				const idx = GAME_STATE.enemies.indexOf(enemy);
+				if (idx !== -1) GAME_STATE.enemies.splice(idx, 1);
+				GAME_STATE.needsRender = true;
+				return;
+			}
             
-            if (enemy.type !== 'k' && enemy.type !== 'X' && dist <= 1) { 
+            if (enemy.type !== 'k' && enemy.type !== 'X' && enemy.type !== 'r' && dist <= 1) { 
                 logAI("CHASE", enemy, `Adjacent to target ${getTargetName(enemy.target)}. -> ATTACKING`);
                 enemy.state = ENEMY_STATES.ATTACKING;
                 enemy.path = null;
@@ -5492,7 +5583,7 @@
             }
             
             // --- 3. TRANSITION: Re-check aggro ---
-            if (enemy.type !== 'k') {
+            if (enemy.type !== 'k' && enemy.type !== 'r') {
                 const aggroTarget = getAggroTargetFor(enemy, enemy.type);
 
                 if (aggroTarget) {
@@ -5536,7 +5627,9 @@
             if (!enemy.path || enemy.path.length === 0) {
                 logAI("CHASE", enemy, `Calculating path to ${getTargetName(enemy.target)}.`);
                 
-                const pathingType = (enemy.type === 'k') ? 'shrieker' : 'enemy';
+                let pathingType = 'enemy';
+				if (enemy.type === 'k') pathingType = 'shrieker';
+				else if (enemy.type === 'r') pathingType = 'rat';
                 enemy.path = findPath(
                     {x: enemy.x, y: enemy.y}, 
                     {x: enemy.target.x, y: enemy.target.y}, 
@@ -5551,7 +5644,7 @@
                 if (nextStep) {
                     const tile = getTileAt(nextStep.x, nextStep.y);
                     if (tile === CONFIG.TILES.ENEMY || tile === CONFIG.TILES.ENEMY_LURKER || 
-                    tile === CONFIG.TILES.ENEMY_BRUTE || tile === CONFIG.TILES.ENEMY_SHRIEKER || tile === CONFIG.TILES.ENEMY_DEVIL_DOG || tile === CONFIG.TILES.ENEMY_EXTRUDER) {
+                    tile === CONFIG.TILES.ENEMY_BRUTE || tile === CONFIG.TILES.ENEMY_SHRIEKER || tile === CONFIG.TILES.ENEMY_DEVIL_DOG || tile === CONFIG.TILES.ENEMY_EXTRUDER || tile === CONFIG.TILES.ENEMY_RAT) {
                         
                         logAI("CHASE", enemy, "Path blocked by another enemy. Re-pathing.");
                         enemy.path = null; // Clear path
@@ -5776,7 +5869,10 @@
             const now = performance.now();
             if (now >= enemy.nextPathCheck) {
                 enemy.nextPathCheck = now + 2000;
-                let path_to_target = findPath({x: enemy.x, y: enemy.y}, {x: enemy.target.x, y: enemy.target.y}, 'enemy');
+                let pType = 'enemy';
+				if (enemy.type === 'k') pType = 'shrieker';
+				else if (enemy.type === 'r') pType = 'rat';
+                let path_to_target = findPath({x: enemy.x, y: enemy.y}, {x: enemy.target.x, y: enemy.target.y}, pType);
                 if (path_to_target) {
                     logAI("SIEGE_PATH", enemy, "Path to original target opened up. -> CHASING");
                     enemy.state = ENEMY_STATES.CHASING;
@@ -5828,7 +5924,10 @@
                 let foundPath = null;
                 for (const spot of spots) {
                     // --- (FIX: Use 'enemy' pathing type) ---
-                    const path = findPath({x: enemy.x, y: enemy.y}, spot, 'enemy');
+                    let pType = 'enemy';
+					if (enemy.type === 'k') pType = 'shrieker';
+					else if (enemy.type === 'r') pType = 'rat';
+                    const path = findPath({x: enemy.x, y: enemy.y}, spot, pType);
                     if (path && path.length > 0) {
                         foundPath = path;
                         break; 
@@ -5853,7 +5952,7 @@
 
                 const tile = getTileAt(nextStep.x, nextStep.y);
                 if (tile === CONFIG.TILES.ENEMY || tile === CONFIG.TILES.ENEMY_LURKER || 
-                    tile === CONFIG.TILES.ENEMY_BRUTE || tile === CONFIG.TILES.ENEMY_SHRIEKER || tile === CONFIG.TILES.ENEMY_DEVIL_DOG || tile === CONFIG.TILES.ENEMY_EXTRUDER) {
+                    tile === CONFIG.TILES.ENEMY_BRUTE || tile === CONFIG.TILES.ENEMY_SHRIEKER || tile === CONFIG.TILES.ENEMY_DEVIL_DOG || tile === CONFIG.TILES.ENEMY_EXTRUDER || tile === CONFIG.TILES.ENEMY_RAT) {
                     logAI("SIEGE_PATH", enemy, "Path to wall blocked by enemy. Re-pathing.");
                     enemy.path = null; // Clear path
                     enemy.nextMove = type.moveSpeed; // Wait and try again
@@ -7730,6 +7829,22 @@
             // Handle Moon Event logic during Low Tide
             if (!GAME_STATE.tide.isHighTide) {
                 
+                // --- NEW: Rat Spawning Logic ---
+                // Threshold = 1.5 * daily food consumption.
+                const foodThreshold = GAME_STATE.villagers.length * 5 * 1.5;
+                if (GAME_STATE.inventory.food > foodThreshold) {
+                    GAME_STATE.tide.nextRatCheck -= deltaTime;
+                    if (GAME_STATE.tide.nextRatCheck <= 0) {
+                        GAME_STATE.tide.nextRatCheck = 40000; // Reset 40s check timer
+                        if (Math.random() < 0.5) { 
+                            spawnRats();
+                        }
+                    }
+                } else {
+                    GAME_STATE.tide.nextRatCheck = 40000; // Keep reset if not above threshold
+                }
+                // --- END NEW ---
+
                 // 1. Check if the event is currently active
                 if (GAME_STATE.isMoonEventActive) {
                     GAME_STATE.moonEventTimer -= deltaTime;
