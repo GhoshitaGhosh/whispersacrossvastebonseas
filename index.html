@@ -2104,7 +2104,10 @@
 				isCarryingIdol: false,
                 nextMoveReady: 0,
 				lastMoveTime: 0,
-				nextRangedReady: 0
+				nextRangedReady: 0,
+				isHoldingInteract: false,
+				reinforceTargetId: null,
+				reinforceProgress: 0
             },
             villagers: [], // Array of {x, y, state, hp, nextMove, target, startPos, id, path}
             structures: [], // Array of {x, y, char, hp, maxHp, mannedBy, nextAttack, shelteredVillagers}
@@ -8139,6 +8142,41 @@
         function update(deltaTime) {
             if (GAME_STATE.isGameOver || GAME_STATE.isVictory) return;
             
+            // --- NEW: HOLD TO REINFORCE LOGIC ---
+            if (GAME_STATE.player.reinforceTargetId) {
+                if (!GAME_STATE.player.isHoldingInteract) {
+                    // Cancelled
+                    logMessage("Reinforce cancelled.", 'warning');
+                    GAME_STATE.inventory.wood += 2; // Refund wood
+                    GAME_STATE.player.reinforceTargetId = null;
+                } else {
+                    GAME_STATE.player.reinforceProgress += deltaTime;
+                    if (GAME_STATE.player.reinforceProgress >= 4000) { // 4 seconds hold
+                        const s = GAME_STATE.structures.find(st => st.id === GAME_STATE.player.reinforceTargetId);
+                        if (s) {
+                            s.isReinforced = true;
+                            if (s.char === CONFIG.TILES.TOWER) {
+                                logMessage("Tower Reinforced! (+Range, +Dmg, +50 HP)", 'build');
+                                s.reinforcementHp = 50; 
+                                s.maxHp += 50; 
+                                s.hp += 50;    
+                            } else {
+                                logMessage("Wall Reinforced! (+100 Temp HP)", 'build');
+                                s.reinforcementHp = 100; 
+                            }
+                            SoundManager.playBuild(); 
+                            triggerParticleBurst(s.x, s.y, '^', 'hit', 8);
+                            GAME_STATE.needsRender = true;
+                        }
+                        GAME_STATE.player.reinforceTargetId = null; // Done
+                    } else if (Math.floor(GAME_STATE.player.reinforceProgress / 1000) > Math.floor((GAME_STATE.player.reinforceProgress - deltaTime) / 1000)) {
+                        // Visual feedback every 1 second
+                        const s = GAME_STATE.structures.find(st => st.id === GAME_STATE.player.reinforceTargetId);
+                        if (s) triggerParticleBurst(s.x, s.y, '+', 'resource', 2);
+                    }
+                }
+            }
+
             updateTargetHighlights();
             
             // Phase Router
@@ -8299,6 +8337,7 @@
         // --- 7. INPUT HANDLING ---
 
         function handlePlayerMove(dx, dy) {
+			if (GAME_STATE.player.reinforceTargetId) return; // Cannot move while reinforcing
 			if (GAME_STATE.phase === 'TUTORIAL' && GAME_STATE.tutorial && GAME_STATE.tutorial.introActive) {
 				return;
 			}
@@ -8767,6 +8806,7 @@
          * PRIORITIES UPDATED: Attack is now high priority, Reinforce is low priority.
          */
         function handleInteract() {
+			if (GAME_STATE.player.reinforceTargetId) return; // Already reinforcing
 			if (GAME_STATE.phase === 'TUTORIAL' && GAME_STATE.tutorial && GAME_STATE.tutorial.introActive) {
 				return;
 			}
@@ -8976,36 +9016,14 @@
                 // --- START REINFORCING ---
                 GAME_STATE.inventory.wood -= 2;
                 
-                logMessage("Reinforcing structure... (4s)", 'build');
+                logMessage("Reinforcing structure... Hold [E]", 'build');
                 SoundManager.playBuild();
                 
-                const duration = 4000;
-                GAME_STATE.player.nextMoveReady = now + duration;
-                GAME_STATE.player.nextAttackReady = now + duration;
+                GAME_STATE.player.reinforceTargetId = structure.id;
+                GAME_STATE.player.reinforceProgress = 0;
                 
                 triggerParticleBurst(structure.x, structure.y, '+', 'resource', 5);
                 updateUI();
-                
-                setTimeout(() => {
-                    const s = GAME_STATE.structures.find(st => st.id === structure.id);
-                    if (s) {
-                        s.isReinforced = true;
-                        
-                        if (s.char === CONFIG.TILES.TOWER) {
-                            logMessage("Tower Reinforced! (+Range, +Dmg, +50 HP)", 'build');
-							s.reinforcementHp = 50; // Shield remains 50
-							s.maxHp += 50; // ADJUSTED: Permanent Max HP buff
-							s.hp += 50;    // Heal by the same amount
-                        } else {
-                            logMessage("Wall Reinforced! (+100 Temp HP)", 'build');
-							s.reinforcementHp = 100; // ADJUSTED: Increased shield (was 50)
-						}
-                        
-                        SoundManager.playBuild(); 
-                        triggerParticleBurst(s.x, s.y, '^', 'hit', 8);
-                        GAME_STATE.needsRender = true;
-                    }
-                }, duration);
                 
                 return; 
             }
@@ -9019,6 +9037,12 @@
             }
         }
         
+
+        function handleKeyUp(e) {
+            if (e.key === 'e' || e.key === 'E') {
+                GAME_STATE.player.isHoldingInteract = false;
+            }
+        }
 
         function handleInput(e) {
 			if (GAME_STATE.phase === 'GAMEOVER') {
@@ -9083,6 +9107,7 @@
                     break;
                 case 'e': // Interact (Gather/Attack)
                 case 'E':
+					GAME_STATE.player.isHoldingInteract = true;
                     e.preventDefault();
 					if (GAME_STATE.phase === 'TUTORIAL') {
 						if (!GAME_STATE.isAlarmActive) {
@@ -9350,6 +9375,7 @@
 
 			// 3. Setup Input
 			window.addEventListener('keydown', handleInput);
+			window.addEventListener('keyup', handleKeyUp);
 
 			// 3.5 Global Audio Unlock Listeners
 			const unlockAudio = () => {
