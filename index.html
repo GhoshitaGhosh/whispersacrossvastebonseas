@@ -8337,7 +8337,13 @@
         // --- 7. INPUT HANDLING ---
 
         function handlePlayerMove(dx, dy) {
-			if (GAME_STATE.player.reinforceTargetId) return; // Cannot move while reinforcing
+			if (GAME_STATE.player.reinforceTargetId) {
+                // Cancel reinforcing if the player moves away
+                logMessage("Reinforce cancelled.", 'warning');
+                GAME_STATE.inventory.wood += 2; // Refund wood
+                GAME_STATE.player.reinforceTargetId = null;
+                GAME_STATE.player.isHoldingInteract = false;
+            }
 			if (GAME_STATE.phase === 'TUTORIAL' && GAME_STATE.tutorial && GAME_STATE.tutorial.introActive) {
 				return;
 			}
